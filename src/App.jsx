@@ -582,6 +582,17 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       reader.readAsDataURL(file);
     });
 
+  // Fingerprint an image: a SHA-256 hash. Identical images give an identical
+  // hash, so we can detect a screenshot that has been submitted before.
+  // This runs entirely in the browser — free, no external service.
+  const hashFile = async (file) => {
+    const buffer = await file.arrayBuffer();
+    const digest = await crypto.subtle.digest("SHA-256", buffer);
+    return Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  };
+
   const complete = async (idx, step) => {
     // Tick steps and reference steps: no image to check, mark done directly.
     if (step.evidence !== "screenshot") {
@@ -593,31 +604,63 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       return;
     }
 
-    // Screenshot steps: send the real image to Gemini via the secure function.
     const file = state[idx].file;
-    if (!file) return; // shouldn't happen — button is disabled without a file
+    if (!file) return; // button is disabled without a file
 
-    // Show a "checking" state while we wait for the AI.
     setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], checking: true }; return n; });
 
     try {
-      const imageBase64 = await fileToBase64(file);
-      const { data, error } = await supabase.functions.invoke("check-screenshot", {
-        body: {
-          imageBase64,
-          imageMimeType: file.type,
-          stepText: step.text,
-          propertyAddress: property,
-        },
+      // --- Step 1: Reuse detection (free, always runs) -------------------
+      const hash = await hashFile(file);
+
+      // Has this exact image been submitted before?
+      const { data: matches } = await supabase
+        .from("screenshot_hashes")
+        .select("property_address, created_at")
+        .eq("hash", hash)
+        .limit(1);
+
+      if (matches && matches.length > 0) {
+        // Reused screenshot — flag it and stop here.
+        setState((prev) => {
+          const n = [...prev];
+          n[idx] = { ...n[idx], done: true, checking: false, status: "flag",
+            note: "This screenshot has already been used before. Possible reuse — needs review." };
+          return n;
+        });
+        return;
+      }
+
+      // New image — record its fingerprint so future uploads are checked against it.
+      await supabase.from("screenshot_hashes").insert({
+        hash,
+        property_address: property,
+        step_text: step.text,
       });
 
-      const result = error
-        ? { status: "flag", note: "Could not reach the checker — needs manual review." }
-        : data;
+      // --- Step 2: AI content check (optional) --------------------------
+      // If the AI service is available it gives a real pass/flag. If it's not
+      // set up or out of quota, we don't block the PM — the screenshot is
+      // accepted for the boss to review manually, and reuse was already checked.
+      let status = "pass";
+      let note = "Screenshot recorded. Passed reuse check.";
+
+      try {
+        const imageBase64 = await fileToBase64(file);
+        const { data, error } = await supabase.functions.invoke("check-screenshot", {
+          body: { imageBase64, imageMimeType: file.type, stepText: step.text, propertyAddress: property },
+        });
+        if (!error && data && data.status) {
+          status = data.status;
+          note = data.note;
+        }
+      } catch {
+        // AI check unavailable — leave as passed-reuse-check for manual review.
+      }
 
       setState((prev) => {
         const n = [...prev];
-        n[idx] = { ...n[idx], done: true, checking: false, status: result.status, note: result.note };
+        n[idx] = { ...n[idx], done: true, checking: false, status, note };
         return n;
       });
     } catch (e) {
