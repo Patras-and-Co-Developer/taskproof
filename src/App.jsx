@@ -2,6 +2,34 @@ import React, { useState, useEffect, useMemo } from "react";
 import { CheckCircle2, AlertTriangle, Circle, Upload, Plus, Trash2, ChevronLeft, LayoutDashboard, ClipboardList, Settings, Hash, Camera, Check, X, Eye, LogOut } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import Login from "./Login.jsx";
+import Tesseract from "tesseract.js";
+
+// Reads the text out of an image (free, runs in the browser) and checks
+// whether the property address appears in it. Returns:
+//   "found"      — the address (or a strong part of it) is in the image
+//   "not_found"  — text was read but the address isn't in it
+//   "unreadable" — OCR couldn't read usable text
+async function checkAddressInImage(file, propertyAddress) {
+  try {
+    const { data } = await Tesseract.recognize(file, "eng");
+    const text = (data?.text || "").toLowerCase();
+    if (text.trim().length < 3) return "unreadable";
+
+    // Compare using the distinctive parts of the address (number + street name),
+    // ignoring common words, so "16B Rutland Road" matches even if the suburb
+    // isn't shown.
+    const stop = new Set(["road", "rd", "street", "st", "avenue", "ave", "lane", "ln", "drive", "dr", "place", "pl", "unit", "flat"]);
+    const parts = propertyAddress.toLowerCase().split(/[\s,]+/).filter((p) => p.length > 1 && !stop.has(p));
+    if (parts.length === 0) return "not_found";
+
+    const hits = parts.filter((p) => text.includes(p)).length;
+    // Consider it a match if most of the distinctive parts are present.
+    return hits / parts.length >= 0.5 ? "found" : "not_found";
+  } catch (e) {
+    console.error("OCR failed:", e);
+    return "unreadable";
+  }
+}
 
 const EVIDENCE = {
   screenshot: { label: "Screenshot (AI-checked)", icon: Camera },
@@ -307,6 +335,7 @@ const C = {
 const statusMeta = {
   pass: { label: "Passed", color: C.pass, bg: C.passBg, Icon: CheckCircle2 },
   flag: { label: "Flagged", color: C.flag, bg: C.flagBg, Icon: AlertTriangle },
+  unverified: { label: "PM-confirmed", color: "#8a6d1a", bg: "#fef7ec", Icon: AlertTriangle },
   missing: { label: "Missing", color: C.miss, bg: C.missBg, Icon: Circle },
   pending: { label: "Not started", color: C.sub, bg: "#eef2f5", Icon: Circle },
 };
@@ -378,6 +407,7 @@ function MainApp({ session, role, userEmail }) {
             property: row.property_address,
             time: new Date(row.created_at).toLocaleString(),
             needsReview: row.needs_review,
+            hasUnverified: row.has_unverified,
             results: row.results,
           }))
         );
@@ -398,6 +428,7 @@ function MainApp({ session, role, userEmail }) {
       property_address: submission.property,
       results: submission.results,
       needs_review: submission.needsReview,
+      has_unverified: submission.hasUnverified,
     });
     if (error) {
       console.error("Could not save submission:", error.message);
@@ -475,21 +506,30 @@ function MainApp({ session, role, userEmail }) {
 
 function Dashboard({ submissions, loading, onReview, isBoss }) {
   const stats = useMemo(() => {
-    let flagged = 0, clean = 0;
-    submissions.forEach((s) => { s.needsReview ? flagged++ : clean++; });
-    return { total: submissions.length, flagged, clean };
+    let flagged = 0, clean = 0, unverified = 0;
+    submissions.forEach((s) => {
+      if (s.needsReview) flagged++;
+      else clean++;
+      if (s.hasUnverified) unverified++;
+    });
+    return { total: submissions.length, flagged, clean, unverified };
   }, [submissions]);
+
+  // Split into three groups for display.
+  const needsReview = submissions.filter((s) => s.needsReview);
+  const pmConfirmed = submissions.filter((s) => !s.needsReview && s.hasUnverified);
+  const clean = submissions.filter((s) => !s.needsReview && !s.hasUnverified);
 
   return (
     <div>
       <Header
         title={isBoss ? "Oversight" : "My submissions"}
-        sub={isBoss ? "You only see what needs attention. Clean submissions sit quietly below." : "The checklists you have submitted. Anything flagged is shown at the top."}
+        sub={isBoss ? "Genuine flags are at the top. PM-confirmed items sit in their own section below." : "The checklists you have submitted. Anything flagged is shown at the top."}
       />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
         <Stat label="Submissions" value={stats.total} />
         <Stat label="Need review" value={stats.flagged} accent={stats.flagged ? C.flag : C.sub} />
-        <Stat label="Cleared" value={stats.clean} accent={C.pass} />
+        <Stat label="PM-confirmed" value={stats.unverified} accent={stats.unverified ? "#8a6d1a" : C.sub} />
       </div>
       {loading ? (
         <div className="card" style={{ padding: 40, textAlign: "center", color: C.sub }}>Loading submissions…</div>
@@ -498,26 +538,52 @@ function Dashboard({ submissions, loading, onReview, isBoss }) {
           No submissions yet. Head to <strong>Do a task</strong> to complete one, then it appears here.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {[...submissions].sort((a, b) => b.needsReview - a.needsReview).map((s) => (
-            <SubmissionRow key={s.id} s={s} onReview={onReview} />
-          ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {needsReview.length > 0 && (
+            <Section title="Needs review" hint="Reuse detected, failed checks, or missing steps.">
+              {needsReview.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} />)}
+            </Section>
+          )}
+          {isBoss && pmConfirmed.length > 0 && (
+            <Section title="PM-confirmed, address not auto-verified" hint="The screenshot didn't show the address; the PM gave a reason. Spot-check only if you want to.">
+              {pmConfirmed.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} />)}
+            </Section>
+          )}
+          {clean.length > 0 && (
+            <Section title="Cleared" hint="Passed all checks.">
+              {clean.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} />)}
+            </Section>
+          )}
         </div>
       )}
     </div>
   );
 }
 
+function Section({ title, hint, children }) {
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: C.ink, marginBottom: 2 }}>{title}</div>
+      <div style={{ fontSize: 12, color: C.sub, marginBottom: 12 }}>{hint}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
+    </div>
+  );
+}
+
 function SubmissionRow({ s, onReview }) {
   const flagged = s.results.filter((r) => r.status === "flag" || r.status === "missing").length;
+  const confirmed = s.results.filter((r) => r.status === "unverified").length;
+  const borderColor = s.needsReview ? C.flag : s.hasUnverified ? "#c99a3a" : C.pass;
   return (
-    <div className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 16, borderLeft: `4px solid ${s.needsReview ? C.flag : C.pass}` }}>
+    <div className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 16, borderLeft: `4px solid ${borderColor}` }}>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, fontSize: 15 }}>{s.checklistTitle}</div>
         <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{s.pm} · {s.property} · {s.time}</div>
       </div>
       {s.needsReview ? (
         <span className="pill" style={{ background: C.flagBg, color: C.flag }}><AlertTriangle size={13} /> {flagged} step{flagged > 1 ? "s" : ""} to check</span>
+      ) : s.hasUnverified ? (
+        <span className="pill" style={{ background: "#fef7ec", color: "#8a6d1a" }}><AlertTriangle size={13} /> {confirmed} PM-confirmed</span>
       ) : (
         <span className="pill" style={{ background: C.passBg, color: C.pass }}><CheckCircle2 size={13} /> All passed</span>
       )}
@@ -547,7 +613,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
   const [pmName, setPmName] = useState(defaultName || "");
   const [property, setProperty] = useState("");
   const [started, setStarted] = useState(false);
-  const [state, setState] = useState(() => checklist.steps.map((st) => ({ stepId: st.id, done: false, value: "", file: null, checking: false, status: "pending", note: "" })));
+  const [state, setState] = useState(() => checklist.steps.map((st) => ({ stepId: st.id, done: false, value: "", file: null, checking: false, needsConfirm: false, confirmReason: "", status: "pending", note: "" })));
   const done = state.filter((s) => s.done).length;
   const allDone = done === checklist.steps.length;
 
@@ -638,12 +704,29 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
         step_text: step.text,
       });
 
-      // --- Step 2: AI content check (optional) --------------------------
+      // --- Step 2: OCR address check (free) -----------------------------
+      // Read the text in the screenshot and see if it mentions the property
+      // address. If it clearly doesn't, we don't fail outright — we ask the PM
+      // to either upload a clearer screenshot or confirm with a reason.
+      const addressResult = await checkAddressInImage(file, property);
+
+      if (addressResult !== "found") {
+        // Park the step in a "needs confirmation" state. The PM will either
+        // re-upload or confirm with a typed reason (handled by confirmUnverified).
+        setState((prev) => {
+          const n = [...prev];
+          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "" };
+          return n;
+        });
+        return;
+      }
+
+      // --- Step 3: AI content check (optional) --------------------------
       // If the AI service is available it gives a real pass/flag. If it's not
       // set up or out of quota, we don't block the PM — the screenshot is
-      // accepted for the boss to review manually, and reuse was already checked.
+      // accepted having passed the reuse and address checks.
       let status = "pass";
-      let note = "Screenshot recorded. Passed reuse check.";
+      let note = "Screenshot recorded. Address confirmed, passed reuse check.";
 
       try {
         const imageBase64 = await fileToBase64(file);
@@ -655,7 +738,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
           note = data.note;
         }
       } catch {
-        // AI check unavailable — leave as passed-reuse-check for manual review.
+        // AI check unavailable — leave as passed for manual review.
       }
 
       setState((prev) => {
@@ -674,19 +757,43 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
   };
 
   // For screenshots we keep the actual File (to send) and its name (to show).
+  // Choosing a new file also clears any pending "needs confirmation" state,
+  // since the PM is replacing the image and it should be re-checked.
   const setFile = (idx, file) => setState((prev) => {
     const n = [...prev];
-    n[idx] = { ...n[idx], file, value: file ? file.name : "" };
+    n[idx] = { ...n[idx], file, value: file ? file.name : "", needsConfirm: false, confirmReason: "" };
     return n;
   });
   const setValue = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], value: v }; return n; });
+  const setConfirmReason = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], confirmReason: v }; return n; });
+
+  // PM confirms a screenshot whose address couldn't be auto-verified, giving a
+  // short reason. This completes the step with a distinct "unverified" status
+  // so the boss can see it in its own section, separate from genuine flags.
+  const confirmUnverified = (idx) => {
+    setState((prev) => {
+      const n = [...prev];
+      const reason = (n[idx].confirmReason || "").trim();
+      n[idx] = {
+        ...n[idx],
+        done: true,
+        needsConfirm: false,
+        status: "unverified",
+        note: `Address not auto-detected. PM confirmed: "${reason}"`,
+      };
+      return n;
+    });
+  };
 
   const submit = () => {
+    // Genuine problems needing the boss's attention.
     const needsReview = state.some((s) => s.status === "flag" || s.status === "missing");
+    // PM-confirmed-but-unverified steps go in their own softer bucket.
+    const hasUnverified = state.some((s) => s.status === "unverified");
     onSubmit({
       id: Date.now().toString(),
       checklistTitle: checklist.title,
-      pm: pmName, property: property, time: "Just now", needsReview,
+      pm: pmName, property: property, time: "Just now", needsReview, hasUnverified,
       results: state.map((s) => { const step = checklist.steps.find((x) => x.id === s.stepId); return { text: step.text, group: step.group, evidence: step.evidence, status: s.done ? s.status : "missing", note: s.done ? s.note : "Step not completed.", value: s.value }; }),
     });
   };
@@ -739,6 +846,31 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
                           style={{ opacity: (s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && !s.file)) ? 0.5 : 1 }}>
                           {s.checking ? "Checking…" : step.evidence === "tick" ? "Mark done" : "Complete step"}
                         </button>
+                      </div>
+                    )}
+
+                    {s.needsConfirm && (
+                      <div style={{ marginTop: 12, padding: 14, background: "#fef7ec", border: `1px solid #f0d9b5`, borderRadius: 9 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#9a6a1a", marginBottom: 4 }}>
+                          Couldn't confirm this is for {property}
+                        </div>
+                        <div style={{ fontSize: 13, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>
+                          The property address wasn't found in this screenshot. Please upload a clearer screenshot that shows the address, or confirm with a brief reason below.
+                        </div>
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600, background: "#fff" }}>
+                            <Upload size={14} /> Upload a clearer one
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files[0]; if (f) { setFile(i, f); complete(i, step); } }} />
+                          </label>
+                        </div>
+                        <div style={{ marginTop: 12 }}>
+                          <input value={s.confirmReason || ""} onChange={(e) => setConfirmReason(i, e.target.value)} placeholder="Reason (e.g. bond form doesn't show address)"
+                            style={{ width: "100%", padding: "9px 12px", border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: "border-box", background: "#fff" }} />
+                          <button className="btn-ghost" onClick={() => confirmUnverified(i)} disabled={!(s.confirmReason || "").trim()}
+                            style={{ opacity: (s.confirmReason || "").trim() ? 1 : 0.5 }}>
+                            Confirm without address
+                          </button>
+                        </div>
                       </div>
                     )}
 

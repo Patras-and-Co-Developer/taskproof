@@ -31,3 +31,11 @@ create policy "read all hashes"
   on screenshot_hashes for select
   to authenticated
   using (true);
+
+-- ---------------------------------------------------------------------
+--  OCR / PM-confirmed tracking: a flag on each submission for whether it
+--  contains any "PM-confirmed, address unverified" steps, so the boss's
+--  dashboard can show those in their own section.
+-- ---------------------------------------------------------------------
+alter table submissions
+  add column if not exists has_unverified boolean not null default false;
