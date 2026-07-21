@@ -295,11 +295,8 @@ function flatten(cl) {
   return { ...cl, steps };
 }
 
-function mockAICheck() {
-  const r = Math.random();
-  if (r > 0.85) return { status: "flag", note: "Image unclear or does not appear to match the expected step. Needs manual review." };
-  return { status: "pass", note: "Evidence appears consistent with this step." };
-}
+// The screenshot check now runs for real via the check-screenshot edge
+// function (see supabase/functions). No mock needed.
 
 const C = {
   navy: "#0f2a43", navySoft: "#1c3d5a", teal: "#1f8a8a", tealSoft: "#e6f4f4",
@@ -550,7 +547,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
   const [pmName, setPmName] = useState(defaultName || "");
   const [property, setProperty] = useState("");
   const [started, setStarted] = useState(false);
-  const [state, setState] = useState(() => checklist.steps.map((st) => ({ stepId: st.id, done: false, value: "", status: "pending", note: "" })));
+  const [state, setState] = useState(() => checklist.steps.map((st) => ({ stepId: st.id, done: false, value: "", file: null, checking: false, status: "pending", note: "" })));
   const done = state.filter((s) => s.done).length;
   const allDone = done === checklist.steps.length;
 
@@ -576,15 +573,69 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
     );
   }
 
-  const complete = (idx, step) => {
-    setState((prev) => {
-      const next = [...prev];
-      let res = { status: "pass", note: "Confirmed." };
-      if (step.evidence === "screenshot") res = mockAICheck();
-      next[idx] = { ...next[idx], done: true, status: res.status, note: res.note };
-      return next;
+  // Turn an uploaded file into base64 so it can be sent to the check function.
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(",")[1]); // strip the data: prefix
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
+
+  const complete = async (idx, step) => {
+    // Tick steps and reference steps: no image to check, mark done directly.
+    if (step.evidence !== "screenshot") {
+      setState((prev) => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], done: true, status: "pass", note: "Confirmed." };
+        return next;
+      });
+      return;
+    }
+
+    // Screenshot steps: send the real image to Gemini via the secure function.
+    const file = state[idx].file;
+    if (!file) return; // shouldn't happen — button is disabled without a file
+
+    // Show a "checking" state while we wait for the AI.
+    setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], checking: true }; return n; });
+
+    try {
+      const imageBase64 = await fileToBase64(file);
+      const { data, error } = await supabase.functions.invoke("check-screenshot", {
+        body: {
+          imageBase64,
+          imageMimeType: file.type,
+          stepText: step.text,
+          propertyAddress: property,
+        },
+      });
+
+      const result = error
+        ? { status: "flag", note: "Could not reach the checker — needs manual review." }
+        : data;
+
+      setState((prev) => {
+        const n = [...prev];
+        n[idx] = { ...n[idx], done: true, checking: false, status: result.status, note: result.note };
+        return n;
+      });
+    } catch (e) {
+      console.error("Check failed:", e);
+      setState((prev) => {
+        const n = [...prev];
+        n[idx] = { ...n[idx], done: true, checking: false, status: "flag", note: "Check failed — needs manual review." };
+        return n;
+      });
+    }
   };
+
+  // For screenshots we keep the actual File (to send) and its name (to show).
+  const setFile = (idx, file) => setState((prev) => {
+    const n = [...prev];
+    n[idx] = { ...n[idx], file, value: file ? file.name : "" };
+    return n;
+  });
   const setValue = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], value: v }; return n; });
 
   const submit = () => {
@@ -637,11 +688,13 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
                         {step.evidence === "screenshot" && (
                           <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
                             <Upload size={14} /> {s.value ? "Screenshot attached" : "Attach screenshot"}
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setValue(i, e.target.files[0]?.name || "screenshot.png")} />
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setFile(i, e.target.files[0] || null)} />
                           </label>
                         )}
-                        <button className="btn-primary" onClick={() => complete(i, step)} disabled={step.evidence === "reference" && !s.value} style={{ opacity: step.evidence === "reference" && !s.value ? 0.5 : 1 }}>
-                          {step.evidence === "tick" ? "Mark done" : "Complete step"}
+                        <button className="btn-primary" onClick={() => complete(i, step)}
+                          disabled={s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && !s.file)}
+                          style={{ opacity: (s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && !s.file)) ? 0.5 : 1 }}>
+                          {s.checking ? "Checking…" : step.evidence === "tick" ? "Mark done" : "Complete step"}
                         </button>
                       </div>
                     )}
