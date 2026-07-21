@@ -659,7 +659,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       .join("");
   };
 
-  const complete = async (idx, step) => {
+  const complete = async (idx, step, overrideFile) => {
     // Tick steps and reference steps: no image to check, mark done directly.
     if (step.evidence !== "screenshot") {
       setState((prev) => {
@@ -670,7 +670,9 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       return;
     }
 
-    const file = state[idx].file;
+    // Use the override file (from a "replace screenshot" redo) if given,
+    // otherwise the file already attached to this step.
+    const file = overrideFile || state[idx].file;
     if (!file) return; // button is disabled without a file
 
     setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], checking: true }; return n; });
@@ -766,6 +768,21 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
   });
   const setValue = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], value: v }; return n; });
   const setConfirmReason = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], confirmReason: v }; return n; });
+
+  // Let a PM replace the screenshot on a step that flagged (reuse, failed check,
+  // or unverified) without redoing the whole checklist. Resets just that step
+  // with the new file, then re-runs the checks on it.
+  const redoStep = (idx, step, newFile) => {
+    if (!newFile) return;
+    setState((prev) => {
+      const n = [...prev];
+      n[idx] = { ...n[idx], done: false, status: "pending", note: "", file: newFile, value: newFile.name, needsConfirm: false, confirmReason: "", checking: false };
+      return n;
+    });
+    // Re-run the checks on the replacement image (passed directly so we don't
+    // depend on the state update above having applied yet).
+    complete(idx, step, newFile);
+  };
 
   // PM confirms a screenshot whose address couldn't be auto-verified, giving a
   // short reason. This completes the step with a distinct "unverified" status
@@ -875,8 +892,16 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
                     )}
 
                     {s.done && (
-                      <div style={{ marginTop: 10, padding: "9px 12px", background: sm.bg, borderRadius: 8, fontSize: 13, color: sm.color, display: "flex", alignItems: "center", gap: 8 }}>
-                        <sm.Icon size={15} /> <strong>{sm.label}.</strong> <span style={{ color: C.sub }}>{s.note}</span>
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ padding: "9px 12px", background: sm.bg, borderRadius: 8, fontSize: 13, color: sm.color, display: "flex", alignItems: "center", gap: 8 }}>
+                          <sm.Icon size={15} /> <strong>{sm.label}.</strong> <span style={{ color: C.sub }}>{s.note}</span>
+                        </div>
+                        {step.evidence === "screenshot" && (s.status === "flag" || s.status === "unverified") && (
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, padding: "7px 12px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                            <Upload size={14} /> Replace screenshot
+                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => redoStep(i, step, e.target.files[0])} />
+                          </label>
+                        )}
                       </div>
                     )}
                   </div>
