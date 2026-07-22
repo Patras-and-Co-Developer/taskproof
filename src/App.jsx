@@ -652,13 +652,20 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
         value: s.value,
       };
       const keepImage = s.file && (s.status === "flag" || s.status === "unverified");
+      console.log("[submit] step:", step.text.slice(0, 30), "| status:", s.status, "| hasFile:", !!s.file, "| willUpload:", keepImage);
       if (keepImage) {
         try {
           const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${s.file.name}`.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const { error } = await supabase.storage.from("screenshots").upload(path, s.file);
-          if (!error) base.screenshotPath = path;
+          console.log("[submit] uploading to:", path);
+          const { data, error } = await supabase.storage.from("screenshots").upload(path, s.file);
+          if (error) {
+            console.error("[submit] upload REJECTED:", error.message, error);
+          } else {
+            console.log("[submit] upload OK:", data?.path);
+            base.screenshotPath = path;
+          }
         } catch (e) {
-          console.error("Screenshot upload failed:", e);
+          console.error("[submit] upload threw:", e);
           // Not fatal — the submission still saves, just without the stored image.
         }
       }
