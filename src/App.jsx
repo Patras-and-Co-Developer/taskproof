@@ -37,281 +37,8 @@ const EVIDENCE = {
   tick: { label: "Simple tick", icon: Check },
 };
 
-const seedChecklists = [
-  {
-    id: "new-tenant",
-    title: "New Tenant",
-    desc: "From approved application through to move-in day.",
-    groups: [
-      { name: "Application approved", steps: [
-        { text: "Confirm in writing that application has been approved and accepted by both parties", evidence: "screenshot" },
-        { text: "Enter tenant(s) contact details into Palace and attach to relevant property", evidence: "screenshot" },
-        { text: "Enter tenancy dates and term of agreement into Palace", evidence: "screenshot" },
-        { text: "Enter rent review date into Palace", evidence: "screenshot" },
-        { text: "Check rental amount and confirm weekly or fortnightly payments", evidence: "tick" },
-        { text: "Enter bond amount due into Palace", evidence: "screenshot" },
-        { text: "Confirm letting fee is the correct amount to be charged to the landlord", evidence: "tick" },
-        { text: "Confirm rental amount in tenant matches the property and adjust if required", evidence: "tick" },
-        { text: "Note any special conditions in tenant file", evidence: "screenshot" },
-        { text: "Confirm details of Body Corporate (if applicable)", evidence: "tick" },
-        { text: "Confirm if pets are approved (if applicable)", evidence: "tick" },
-        { text: "Confirm amount tenant is to be charged for water (if applicable)", evidence: "tick" },
-        { text: "Enter ingoing water meter reading on tenant profile in Palace", evidence: "screenshot" },
-        { text: "Confirm arrangements for gardens and lawn maintenance (if applicable)", evidence: "tick" },
-        { text: "Confirm arrangements for pool maintenance (if applicable)", evidence: "tick" },
-        { text: "Confirm all details for this tenancy have been entered into Palace", evidence: "tick" },
-        { text: "Prepare tenancy agreement and pack (agreement x3, arrears policy, maintenance policy, key release form, bond lodgement form, welcome pack)", evidence: "screenshot" },
-        { text: "Schedule ingoing Property Condition Report", evidence: "screenshot" },
-        { text: "Schedule inventory (if applicable)", evidence: "tick" },
-        { text: "Prepare Fastconnect or Movinghub form (if applicable)", evidence: "tick" },
-        { text: "File all relevant information and documents in tenant file", evidence: "screenshot" },
-      ]},
-      { name: "On the day the tenancy agreement is signed", steps: [
-        { text: "Verify with tenant that details on the agreement are correct (move-in date, bond, rent & frequency, pets, smoking, occupants)", evidence: "tick" },
-        { text: "Explain tenancy agreement in full to the tenant(s)", evidence: "tick" },
-        { text: "Explain agency policies", evidence: "tick" },
-        { text: "All parties to sign bond lodgement form", evidence: "screenshot" },
-        { text: "Tenant to pay full ingoing costs at point of signing", evidence: "tick" },
-        { text: "Tenant(s) to sign utility connection form (if applicable)", evidence: "tick" },
-        { text: "Advise tenant(s) to organise contents insurance", evidence: "tick" },
-        { text: "Advise tenant(s) regarding maintenance and care of smoke detectors", evidence: "tick" },
-        { text: "Advise tenant(s) on pool / garden care where applicable", evidence: "tick" },
-        { text: "Photocopy tenancy agreement and give a copy to tenant(s)", evidence: "tick" },
-        { text: "File original tenancy agreement", evidence: "screenshot" },
-        { text: "Arrange for the For Rent sign to be removed", evidence: "tick" },
-        { text: "Remove property from websites", evidence: "screenshot" },
-        { text: "Cancel any pre-booked advertising / marketing", evidence: "tick" },
-        { text: "Send utility connection form (if applicable)", evidence: "tick" },
-      ]},
-      { name: "Prior to move-in date", steps: [
-        { text: "Check ingoing Property Condition Report has been completed", evidence: "screenshot" },
-        { text: "Print three copies of ingoing Property Condition Report", evidence: "tick" },
-        { text: "Check welcome and information pack is ready for move-in", evidence: "tick" },
-        { text: "Arrange a time for tenant(s) to collect keys", evidence: "tick" },
-      ]},
-      { name: "Move-in date", steps: [
-        { text: "Check initial rent and bond has been paid in full and receipted", evidence: "screenshot" },
-        { text: "Check all documentation is ready for key release", evidence: "tick" },
-        { text: "Ensure tenant(s) sign office copy of key release", evidence: "screenshot" },
-        { text: "Ensure tenant(s) sign office copy of ingoing Property Condition Report", evidence: "screenshot" },
-        { text: "Ensure tenant(s) sign office copy of inventory (if applicable)", evidence: "tick" },
-        { text: "Explain welcome and information pack", evidence: "tick" },
-      ]},
-    ],
-  },
-  {
-    id: "vacating-tenant",
-    title: "Vacating Tenant",
-    desc: "Notice through to bond refund and filing.",
-    groups: [
-      { name: "On receipt of notice", steps: [
-        { text: "Confirm when written notice has been received / issued from/to the tenants", evidence: "screenshot" },
-        { text: "Confirm the correct notice period has been received/issued", evidence: "tick" },
-        { text: "Confirm tenant has periodic or expiring fixed term and is not breaking tenancy", evidence: "tick" },
-        { text: "Enter vacate date in Palace", evidence: "screenshot" },
-        { text: "Enter tenant forwarding address and new contact numbers in Palace", evidence: "screenshot" },
-        { text: "Contact owner to advise of vacate notice and discuss rent review", evidence: "tick" },
-        { text: "If rent is to increase, update in Palace and increase bond and letting fee", evidence: "screenshot" },
-        { text: "Forward email to owner confirming vacate date, rental amount and advertising details", evidence: "screenshot" },
-        { text: "Forward letter of confirmation to tenant(s) with vacate procedures, cleaning guide and ingoing PCR", evidence: "screenshot" },
-        { text: "Schedule date for final bond inspection in Palace", evidence: "screenshot" },
-        { text: "Arrange for For Rent sign to be erected", evidence: "tick" },
-        { text: "Upload property onto appropriate websites", evidence: "screenshot" },
-        { text: "Arrange and book other advertising / marketing as per agreed schedule", evidence: "tick" },
-        { text: "Place tenant file in vacate rack", evidence: "screenshot" },
-      ]},
-      { name: "On day of vacate", steps: [
-        { text: "Confirm rent is paid to vacate date", evidence: "screenshot" },
-        { text: "Read water meter (if applicable) and invoice tenant(s)", evidence: "screenshot" },
-        { text: "Take photographs to verify condition of property", evidence: "screenshot" },
-        { text: "Confirm property condition is acceptable compared to ingoing PCR", evidence: "tick" },
-        { text: "If not, arrange extra cleaning or necessary maintenance and repairs", evidence: "tick" },
-        { text: "Schedule re-inspection", evidence: "screenshot" },
-      ]},
-      { name: "Finalising", steps: [
-        { text: "Schedule date for return of invoices for extra work to be charged to tenant(s)", evidence: "tick" },
-        { text: "Check returned keys against keys given at start of tenancy", evidence: "tick" },
-        { text: "Photocopy and file receipts (carpet cleaning, pest control, professional cleaning, pool certificate as applicable)", evidence: "screenshot" },
-        { text: "Photocopy and give tenant(s) copy of Exit Condition Report (retain original)", evidence: "screenshot" },
-        { text: "File final bond inspection report and any extra work scheduled plus invoices", evidence: "screenshot" },
-        { text: "File vacating tenant checklist", evidence: "screenshot" },
-        { text: "Check with owner prior to finalising the bond", evidence: "tick" },
-        { text: "Follow bond refund process", evidence: "screenshot" },
-      ]},
-    ],
-  },
-  {
-    id: "rent-review",
-    title: "Rent Review",
-    desc: "Rent review report through to bond top-up.",
-    groups: [
-      { name: "Preparing the review", steps: [
-        { text: "Prepare and print rent review report two months in advance of review date", evidence: "screenshot" },
-        { text: "Check tenant(s) for any special rent review clauses", evidence: "tick" },
-        { text: "Prepare CMA (Comparative Market Analysis) to substantiate rental rate advice", evidence: "screenshot" },
-        { text: "Forward email to owner with CMA to advise if rent could increase or remain, and request authorisation", evidence: "screenshot" },
-      ]},
-      { name: "Rental increase and renewal accepted", steps: [
-        { text: "Enter details of rent increase in Palace", evidence: "screenshot" },
-        { text: "Issue tenant(s) with minimum 60 days notice of rent increase (plus service days)", evidence: "screenshot" },
-        { text: "Advise tenant(s) of additional funds required to increase bond accordingly", evidence: "tick" },
-        { text: "Send bond increase amount to MBIE", evidence: "screenshot" },
-      ]},
-    ],
-  },
-  {
-    id: "new-mgmt-existing-tenant",
-    title: "New Management - Existing Tenant",
-    desc: "Taking on a property that already has a tenant.",
-    groups: [
-      { name: "Setup", steps: [
-        { text: "Ensure Management Authority is completed and signed by all required parties", evidence: "screenshot" },
-        { text: "Give a copy of the Management Authority to the owner with welcome letter/pack", evidence: "tick" },
-        { text: "Create property file and file original Management Authority", evidence: "screenshot" },
-        { text: "Enter owner, property and tenant details into Palace", evidence: "screenshot" },
-        { text: "File copy of notification from owner advising current agent of transfer", evidence: "screenshot" },
-        { text: "Mark date in calendar for official transfer of management", evidence: "screenshot" },
-        { text: "Send letter to current managing agent requesting handover documents (agreement, PCR, ledger, keys, bond form, active notices, correspondence)", evidence: "screenshot" },
-        { text: "Notify tenant in writing of management transfer", evidence: "screenshot" },
-        { text: "Set schedule in Palace for recurring routine inspections (13 weekly)", evidence: "screenshot" },
-        { text: "Send notifications to Council / Body Corporate / Insurer for accounts (if applicable)", evidence: "tick" },
-        { text: "Enter insurance policy and renewal dates into Palace", evidence: "screenshot" },
-        { text: "Enter owner maintenance instructions and spend limit into Palace", evidence: "screenshot" },
-      ]},
-      { name: "On day of handover", steps: [
-        { text: "Ensure all documentation has been received and follow up if necessary", evidence: "tick" },
-        { text: "Record keys in register and Palace, tag, code, photocopy and place in cabinet", evidence: "screenshot" },
-        { text: "Enter tenant paid-to-date into Palace", evidence: "screenshot" },
-        { text: "Lodge Change of Landlord/Agent form with MBIE", evidence: "screenshot" },
-        { text: "Send letter to owner advising of successful transfer (owners pack, photocopy of keys received)", evidence: "screenshot" },
-        { text: "Send welcome pack to tenants (ledger, keys held, ingoing PCR)", evidence: "screenshot" },
-      ]},
-    ],
-  },
-  {
-    id: "new-mgmt-owner-occupied",
-    title: "New Management - Owner Occupied",
-    desc: "Taking on a vacant owner-occupied property to market.",
-    groups: [
-      { name: "Setup and marketing", steps: [
-        { text: "Ensure Management Authority is completed and signed by ALL required parties", evidence: "screenshot" },
-        { text: "Key release form to be signed by owner", evidence: "screenshot" },
-        { text: "Give a copy of the Management Authority to the owner with welcome letter/pack", evidence: "tick" },
-        { text: "Create property file and file original Management Authority", evidence: "screenshot" },
-        { text: "Confirm Landlord Protection Insurance has been offered and followed up", evidence: "tick" },
-        { text: "Arrange Landlord Protection Insurance (if applicable)", evidence: "tick" },
-        { text: "Ensure all owner and property details are accurate and enter into Palace", evidence: "screenshot" },
-        { text: "Record keys in register and Palace, tag, code, photocopy and place in cabinet", evidence: "screenshot" },
-        { text: "Enter insurance policy and renewal dates into Palace", evidence: "screenshot" },
-        { text: "Enter owner maintenance instructions and spend limit into Palace", evidence: "screenshot" },
-        { text: "Set schedule in Palace for recurring routine inspections (13 weekly)", evidence: "screenshot" },
-        { text: "Photograph property for advertising purposes", evidence: "screenshot" },
-        { text: "Arrange for For Rent sign to be erected at property", evidence: "tick" },
-        { text: "Arrange and book advertising and marketing as per agreed schedule", evidence: "tick" },
-        { text: "Load property onto applicable websites", evidence: "screenshot" },
-        { text: "Arrange times for property to be viewed and set up schedule", evidence: "screenshot" },
-        { text: "Ensure all team are aware of the new listing and viewing instructions", evidence: "tick" },
-        { text: "Advise prospective tenants database of new listing", evidence: "tick" },
-        { text: "Send notifications to Council / Body Corporate / Insurer for accounts (if applicable)", evidence: "tick" },
-        { text: "Schedule time for ingoing Property Condition Report to be completed", evidence: "screenshot" },
-      ]},
-    ],
-  },
-  {
-    id: "new-mgmt-vacant",
-    title: "New Management - Vacant Property",
-    desc: "Taking on a vacant property to market for lease.",
-    groups: [
-      { name: "Setup and marketing", steps: [
-        { text: "Ensure Management Authority is completed and signed by ALL required parties", evidence: "screenshot" },
-        { text: "Key release form to be signed by owner", evidence: "screenshot" },
-        { text: "Give a copy of the Management Authority to the owner with welcome letter/pack", evidence: "tick" },
-        { text: "Create property file and file original Management Authority", evidence: "screenshot" },
-        { text: "Confirm Landlord Protection Insurance has been offered and followed up", evidence: "tick" },
-        { text: "Arrange Landlord Protection Insurance (if applicable)", evidence: "tick" },
-        { text: "Ensure all owner and property details are accurate and enter into Palace", evidence: "screenshot" },
-        { text: "Record keys in register and Palace, tag, code, photocopy and place in cabinet", evidence: "screenshot" },
-        { text: "Enter insurance policy and renewal dates into Palace", evidence: "screenshot" },
-        { text: "Enter owner maintenance instructions and spend limit into Palace", evidence: "screenshot" },
-        { text: "Set schedule in Palace for recurring routine inspections (13 weekly)", evidence: "screenshot" },
-        { text: "Arrange repairs, maintenance, gardening and/or cleaning if necessary", evidence: "tick" },
-        { text: "Photograph property for advertising purposes", evidence: "screenshot" },
-        { text: "Arrange for For Rent sign to be erected at property", evidence: "tick" },
-        { text: "Arrange and book advertising and marketing as per agreed schedule", evidence: "tick" },
-        { text: "Load property onto applicable websites", evidence: "screenshot" },
-        { text: "Arrange times for property to be viewed and set up schedule", evidence: "screenshot" },
-        { text: "Ensure all team are aware of the new listing and viewing instructions", evidence: "tick" },
-        { text: "Advise prospective tenants database of new listing", evidence: "tick" },
-        { text: "Send notifications to Council / Body Corporate / Insurer for accounts (if applicable)", evidence: "tick" },
-        { text: "Send notification to Water Care / Veolia", evidence: "tick" },
-      ]},
-    ],
-  },
-  {
-    id: "mgmt-listed-for-sale",
-    title: "Management Listed for Sale",
-    desc: "When a managed property is put on the market.",
-    groups: [
-      { name: "On listing", steps: [
-        { text: "Ensure notice from listing agent / owner advising property listed for sale is received in writing", evidence: "screenshot" },
-        { text: "Tenant(s) issued with letter notifying them of the landlord intention to sell", evidence: "screenshot" },
-        { text: "Give listing agent required info (info sheet, notification, viewing schedule, tenant contacts, rent, fixed term dates, tenant letter)", evidence: "tick" },
-        { text: "Collect and retain a copy of the viewing schedule signed by all parties", evidence: "screenshot" },
-      ]},
-      { name: "Periodic tenancy - vacant possession required", steps: [
-        { text: "Check with sales consultant if a 42 day notice needs to be issued", evidence: "tick" },
-        { text: "Record date in Palace when the 42 day notice was issued (at least one day prior to settlement)", evidence: "screenshot" },
-        { text: "Set reminder date to follow up with tenant(s) to ensure vacating on correct date", evidence: "screenshot" },
-        { text: "Schedule final bond inspection", evidence: "screenshot" },
-      ]},
-      { name: "Tenancy to remain in place", steps: [
-        { text: "If purchased by investor and tenant continuing, contact purchaser to co-ordinate management", evidence: "tick" },
-        { text: "If management continuing with agency, forward a letter to the tenant(s) confirming no changes", evidence: "screenshot" },
-      ]},
-      { name: "Prior to / on settlement (investment purchase)", steps: [
-        { text: "Schedule date in Palace as reminder of settlement day", evidence: "screenshot" },
-        { text: "Run Change of Ownership wizard in Palace (if applicable)", evidence: "screenshot" },
-        { text: "Ensure rental payments are credited to appropriate owner", evidence: "screenshot" },
-        { text: "Ensure property card and tenant have been linked to the new owner in Palace", evidence: "screenshot" },
-        { text: "Check if final water meter reading is required", evidence: "tick" },
-        { text: "Check all invoices are paid or flag any outstanding", evidence: "tick" },
-      ]},
-    ],
-  },
-  {
-    id: "finalisation-mgmt",
-    title: "Finalisation of Management",
-    desc: "Handover of a management to a new agency or owner.",
-    groups: [
-      { name: "On cancellation", steps: [
-        { text: "Written advice of cancellation received from owner / or sent by agency", evidence: "screenshot" },
-        { text: "Put owner funds on hold and check for any outstanding invoices", evidence: "screenshot" },
-        { text: "Confirm required notice received / given", evidence: "tick" },
-        { text: "Handover date entered into Palace", evidence: "screenshot" },
-        { text: "Confirm notification received and send letter to owner (if applicable)", evidence: "tick" },
-        { text: "Prepare copies (if remaining tenanted): agreement, PCR, ledger, paid-to date, keys given to tenant", evidence: "screenshot" },
-        { text: "Prepare copies of any outstanding tenant invoices", evidence: "tick" },
-        { text: "Prepare bond transfer (Change of Landlord/Agent form)", evidence: "screenshot" },
-        { text: "If tenant vacating, owner to check property prior to bond release and sign off condition", evidence: "tick" },
-        { text: "Photocopy all management keys / remotes retained in office", evidence: "screenshot" },
-        { text: "Ensure enough funds held in trust to pay accounts and management fees", evidence: "screenshot" },
-        { text: "Send notification to tenant(s) advising management end and last payment due", evidence: "screenshot" },
-      ]},
-      { name: "On day of finalisation", steps: [
-        { text: "Check maintenance pending and process all accounts", evidence: "screenshot" },
-        { text: "Confirm all management, sundry, letting fees have been deducted", evidence: "tick" },
-        { text: "Send notification to Council / Body Corporate / Insurance of change of management", evidence: "tick" },
-        { text: "Handover prepared documents and keys to owner and/or new agent", evidence: "tick" },
-        { text: "Ensure new agent / owner signs confirmation of receipt of keys and documents", evidence: "screenshot" },
-        { text: "Send email to owner confirming transfer / handover", evidence: "screenshot" },
-      ]},
-      { name: "End of month", steps: [
-        { text: "On completion of end of month, mark owner, tenant and property as inactive in Palace", evidence: "screenshot" },
-        { text: "Archive owner / tenant and property with reason for lost management stated", evidence: "screenshot" },
-      ]},
-    ],
-  },
-];
+// Checklists now live in the database and are loaded at runtime.
+// (They used to be hardcoded here.)
 
 function flatten(cl) {
   const steps = [];
@@ -381,11 +108,35 @@ function MainApp({ session, role, userEmail }) {
   const isBoss = role === "boss";
   // PMs land on their own tasks; the boss lands on the oversight dashboard.
   const [view, setView] = useState(isBoss ? "dashboard" : "do");
-  const [checklists, setChecklists] = useState(seedChecklists.map(flatten));
+  const [checklists, setChecklists] = useState([]);
+  const [loadingChecklists, setLoadingChecklists] = useState(true);
   const [submissions, setSubmissions] = useState([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(true);
   const [activeChecklist, setActiveChecklist] = useState(null);
   const [reviewing, setReviewing] = useState(null);
+
+  // Load checklists from the database (boss edits persist there).
+  const loadChecklists = async () => {
+    const { data, error } = await supabase
+      .from("checklists")
+      .select("*")
+      .order("sort_order", { ascending: true });
+    if (error) {
+      console.error("Could not load checklists:", error.message);
+    } else {
+      // Map database rows into the shape the app uses, flattening groups into
+      // a single step list (with group labels) like the app expects.
+      setChecklists(data.map((row) => flatten({
+        id: row.id,
+        title: row.title,
+        desc: row.description || "",
+        groups: row.groups || [],
+      })));
+    }
+    setLoadingChecklists(false);
+  };
+
+  useEffect(() => { loadChecklists(); }, []);
 
   // Load submissions. The database rules (RLS) decide what comes back:
   // the boss gets everyone's, a PM gets only their own. The app doesn't
@@ -512,9 +263,9 @@ function MainApp({ session, role, userEmail }) {
 
         <main style={{ flex: 1, padding: "30px 34px", maxWidth: 1000 }}>
           {view === "dashboard" && <Dashboard submissions={submissions} loading={loadingSubmissions} onReview={setReviewing} isBoss={isBoss} onDelete={deleteSubmission} />}
-          {view === "do" && !activeChecklist && <PickTask checklists={checklists} onPick={startTask} />}
+          {view === "do" && !activeChecklist && <PickTask checklists={checklists} onPick={startTask} loading={loadingChecklists} />}
           {view === "do" && activeChecklist && <DoTask checklist={activeChecklist} onSubmit={submitTask} onBack={() => setActiveChecklist(null)} defaultName={userEmail} />}
-          {view === "build" && isBoss && <Builder checklists={checklists} setChecklists={setChecklists} />}
+          {view === "build" && isBoss && <Builder checklists={checklists} reload={loadChecklists} />}
         </main>
       </div>
 
@@ -664,10 +415,15 @@ function SubmissionRow({ s, onReview, onDelete, canDelete }) {
   );
 }
 
-function PickTask({ checklists, onPick }) {
+function PickTask({ checklists, onPick, loading }) {
   return (
     <div>
       <Header title="Do a task" sub="Pick a checklist. Work through each step and attach evidence." />
+      {loading ? (
+        <div className="card" style={{ padding: 40, textAlign: "center", color: C.sub }}>Loading checklists…</div>
+      ) : checklists.length === 0 ? (
+        <div className="card" style={{ padding: 40, textAlign: "center", color: C.sub }}>No checklists available yet.</div>
+      ) : (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 14 }}>
         {checklists.map((cl) => (
           <button key={cl.id} onClick={() => onPick(cl)} className="card" style={{ padding: 20, textAlign: "left", cursor: "pointer" }}>
@@ -677,6 +433,7 @@ function PickTask({ checklists, onPick }) {
           </button>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -1042,63 +799,154 @@ function ReviewModal({ submission, onClose, onDelete }) {
   );
 }
 
-function Builder({ checklists, setChecklists }) {
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
-  const [steps, setSteps] = useState([{ text: "", evidence: "screenshot" }]);
+function Builder({ checklists, reload }) {
+  const [editing, setEditing] = useState(null); // null = list view; object = editing
+  const [busy, setBusy] = useState(false);
 
-  const addStep = () => setSteps((s) => [...s, { text: "", evidence: "screenshot" }]);
-  const rmStep = (i) => setSteps((s) => s.filter((_, x) => x !== i));
-  const upStep = (i, k, v) => setSteps((s) => { const n = [...s]; n[i] = { ...n[i], [k]: v }; return n; });
-
-  const save = () => {
-    if (!title.trim() || steps.some((s) => !s.text.trim())) return;
-    const cl = { id: Date.now().toString(), title, desc, steps: steps.map((s, i) => ({ ...s, id: `n${i}`, group: null })) };
-    setChecklists((c) => [...c, cl]);
-    setTitle(""); setDesc(""); setSteps([{ text: "", evidence: "screenshot" }]);
+  // Turn a flattened checklist (steps with group labels) back into grouped form
+  // for editing. New checklists start with one empty group.
+  const toGrouped = (cl) => {
+    if (!cl) return { id: null, title: "", description: "", groups: [{ name: "", steps: [{ text: "", evidence: "screenshot" }] }] };
+    const groups = [];
+    (cl.steps || []).forEach((s) => {
+      const gname = s.group || "";
+      let g = groups.find((x) => x.name === gname);
+      if (!g) { g = { name: gname, steps: [] }; groups.push(g); }
+      g.steps.push({ text: s.text, evidence: s.evidence });
+    });
+    return { id: cl.id, title: cl.title, description: cl.desc || "", groups: groups.length ? groups : [{ name: "", steps: [{ text: "", evidence: "screenshot" }] }] };
   };
+
+  const startNew = () => setEditing(toGrouped(null));
+  const startEdit = (cl) => setEditing(toGrouped(cl));
+
+  const save = async (draft) => {
+    // Basic validation: title and at least one non-empty step.
+    if (!draft.title.trim()) { alert("Give the checklist a title."); return; }
+    const cleanGroups = draft.groups
+      .map((g) => ({ name: g.name.trim(), steps: g.steps.filter((s) => s.text.trim()).map((s) => ({ text: s.text.trim(), evidence: s.evidence })) }))
+      .filter((g) => g.steps.length > 0);
+    if (cleanGroups.length === 0) { alert("Add at least one step."); return; }
+
+    setBusy(true);
+    if (draft.id) {
+      const { error } = await supabase.from("checklists")
+        .update({ title: draft.title.trim(), description: draft.description.trim(), groups: cleanGroups, updated_at: new Date().toISOString() })
+        .eq("id", draft.id);
+      if (error) { setBusy(false); alert("Couldn't save changes: " + error.message); return; }
+    } else {
+      const { error } = await supabase.from("checklists")
+        .insert({ title: draft.title.trim(), description: draft.description.trim(), groups: cleanGroups, sort_order: checklists.length });
+      if (error) { setBusy(false); alert("Couldn't create checklist: " + error.message); return; }
+    }
+    setBusy(false);
+    setEditing(null);
+    await reload();
+  };
+
+  const remove = async (id) => {
+    setBusy(true);
+    const { error } = await supabase.from("checklists").delete().eq("id", id);
+    setBusy(false);
+    if (error) { alert("Couldn't delete: " + error.message); return; }
+    await reload();
+  };
+
+  if (editing) {
+    return <ChecklistEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} busy={busy} />;
+  }
 
   return (
     <div>
-      <Header title="Checklists" sub="Build a new checklist. Any task can be added here without a rebuild." />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        <div className="card" style={{ padding: 20 }}>
-          <div style={{ fontWeight: 600, marginBottom: 14 }}>New checklist</div>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Task title (e.g. Property Viewing)" style={inp} />
-          <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Short description" style={{ ...inp, marginTop: 10 }} />
-          <div style={{ fontSize: 13, fontWeight: 600, margin: "16px 0 8px", color: C.sub }}>Steps</div>
-          {steps.map((st, i) => (
-            <div key={i} style={{ padding: 12, border: `1px solid ${C.line}`, borderRadius: 9, marginBottom: 10 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: C.teal, paddingTop: 8 }}>{i + 1}</span>
-                <div style={{ flex: 1 }}>
-                  <input value={st.text} onChange={(e) => upStep(i, "text", e.target.value)} placeholder="What must be done" style={{ ...inp, marginBottom: 8 }} />
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <select value={st.evidence} onChange={(e) => upStep(i, "evidence", e.target.value)} style={{ ...inp, flex: 1 }}>
-                      {Object.entries(EVIDENCE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                    {steps.length > 1 && <button onClick={() => rmStep(i)} className="btn-ghost" style={{ padding: "0 12px" }}><Trash2 size={15} /></button>}
-                  </div>
+      <Header title="Checklists" sub="Edit, delete, or add checklists. Changes are saved and seen by everyone." />
+      <button className="btn-primary" onClick={startNew} style={{ marginBottom: 18, display: "inline-flex", alignItems: "center", gap: 6 }}><Plus size={16} /> New checklist</button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {checklists.map((cl) => (
+          <ChecklistCard key={cl.id} cl={cl} onEdit={() => startEdit(cl)} onDelete={() => remove(cl.id)} busy={busy} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChecklistCard({ cl, onEdit, onDelete, busy }) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div className="card" style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 15 }}>{cl.title}</div>
+        <div style={{ fontSize: 13, color: C.sub, margin: "3px 0 4px" }}>{cl.desc}</div>
+        <div style={{ fontSize: 12, color: C.teal }}>{cl.steps.length} steps</div>
+      </div>
+      <button className="btn-ghost" onClick={onEdit} disabled={busy}>Edit</button>
+      {confirming ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: C.miss }}>Delete?</span>
+          <button className="btn-ghost" onClick={onDelete} disabled={busy} style={{ color: C.miss, borderColor: C.miss, padding: "6px 10px" }}>Yes</button>
+          <button className="btn-ghost" onClick={() => setConfirming(false)} style={{ padding: "6px 10px" }}>No</button>
+        </div>
+      ) : (
+        <button className="btn-ghost" onClick={() => setConfirming(true)} disabled={busy} style={{ color: C.sub, padding: "9px 11px" }} title="Delete checklist"><Trash2 size={15} /></button>
+      )}
+    </div>
+  );
+}
+
+function ChecklistEditor({ initial, onSave, onCancel, busy }) {
+  const [draft, setDraft] = useState(initial);
+
+  const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
+  const setGroupName = (gi, name) => setDraft((d) => { const g = [...d.groups]; g[gi] = { ...g[gi], name }; return { ...d, groups: g }; });
+  const addGroup = () => setDraft((d) => ({ ...d, groups: [...d.groups, { name: "", steps: [{ text: "", evidence: "screenshot" }] }] }));
+  const removeGroup = (gi) => setDraft((d) => ({ ...d, groups: d.groups.filter((_, i) => i !== gi) }));
+  const addStep = (gi) => setDraft((d) => { const g = [...d.groups]; g[gi] = { ...g[gi], steps: [...g[gi].steps, { text: "", evidence: "screenshot" }] }; return { ...d, groups: g }; });
+  const removeStep = (gi, si) => setDraft((d) => { const g = [...d.groups]; g[gi] = { ...g[gi], steps: g[gi].steps.filter((_, i) => i !== si) }; return { ...d, groups: g }; });
+  const setStep = (gi, si, k, v) => setDraft((d) => { const g = [...d.groups]; const st = [...g[gi].steps]; st[si] = { ...st[si], [k]: v }; g[gi] = { ...g[gi], steps: st }; return { ...d, groups: g }; });
+
+  return (
+    <div>
+      <button className="btn-ghost" onClick={onCancel} style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><ChevronLeft size={16} /> Back to list</button>
+      <Header title={draft.id ? "Edit checklist" : "New checklist"} sub="Group steps under section headings. Each step has an evidence type." />
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: C.sub, display: "block", marginBottom: 6 }}>Title</label>
+        <input value={draft.title} onChange={(e) => setField("title", e.target.value)} placeholder="e.g. Property Viewing" style={{ ...inp, marginBottom: 14 }} />
+        <label style={{ fontSize: 13, fontWeight: 600, color: C.sub, display: "block", marginBottom: 6 }}>Description</label>
+        <input value={draft.description} onChange={(e) => setField("description", e.target.value)} placeholder="Short description" style={inp} />
+      </div>
+
+      {draft.groups.map((g, gi) => (
+        <div key={gi} className="card" style={{ padding: 18, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <input value={g.name} onChange={(e) => setGroupName(gi, e.target.value)} placeholder="Section heading (optional, e.g. On day of vacate)"
+              style={{ ...inp, fontWeight: 600, color: C.teal }} />
+            {draft.groups.length > 1 && (
+              <button className="btn-ghost" onClick={() => removeGroup(gi)} style={{ padding: "9px 11px", color: C.sub }} title="Remove section"><Trash2 size={15} /></button>
+            )}
+          </div>
+          {g.steps.map((st, si) => (
+            <div key={si} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.teal, paddingTop: 9 }}>{si + 1}</span>
+              <div style={{ flex: 1 }}>
+                <input value={st.text} onChange={(e) => setStep(gi, si, "text", e.target.value)} placeholder="What must be done" style={{ ...inp, marginBottom: 8 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select value={st.evidence} onChange={(e) => setStep(gi, si, "evidence", e.target.value)} style={{ ...inp, flex: 1 }}>
+                    {Object.entries(EVIDENCE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
+                  {g.steps.length > 1 && <button onClick={() => removeStep(gi, si)} className="btn-ghost" style={{ padding: "0 12px" }}><Trash2 size={15} /></button>}
                 </div>
               </div>
             </div>
           ))}
-          <button onClick={addStep} className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 16 }}><Plus size={15} /> Add step</button>
-          <div><button onClick={save} className="btn-primary">Save checklist</button></div>
+          <button onClick={() => addStep(gi)} className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 4 }}><Plus size={14} /> Add step</button>
         </div>
+      ))}
 
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sub, marginBottom: 10 }}>Existing checklists ({checklists.length})</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {checklists.map((cl) => (
-              <div key={cl.id} className="card" style={{ padding: 15 }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{cl.title}</div>
-                <div style={{ fontSize: 13, color: C.sub, margin: "3px 0 8px" }}>{cl.desc}</div>
-                <div style={{ fontSize: 12, color: C.teal }}>{cl.steps.length} steps</div>
-              </div>
-            ))}
-          </div>
-        </div>
+      <button onClick={addGroup} className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 20 }}><Plus size={15} /> Add section</button>
+
+      <div style={{ display: "flex", gap: 12 }}>
+        <button className="btn-primary" onClick={() => onSave(draft)} disabled={busy}>{busy ? "Saving…" : "Save checklist"}</button>
+        <button className="btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
       </div>
     </div>
   );
