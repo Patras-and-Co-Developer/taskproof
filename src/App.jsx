@@ -442,6 +442,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
   const [pmName, setPmName] = useState(defaultName || "");
   const [property, setProperty] = useState("");
   const [started, setStarted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [state, setState] = useState(() => checklist.steps.map((st) => ({ stepId: st.id, done: false, value: "", file: null, checking: false, needsConfirm: false, confirmReason: "", status: "pending", note: "" })));
   const done = state.filter((s) => s.done).length;
   const allDone = done === checklist.steps.length;
@@ -631,16 +632,44 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
     });
   };
 
-  const submit = () => {
+  const submit = async () => {
+    setSubmitting(true);
     // Genuine problems needing the boss's attention.
     const needsReview = state.some((s) => s.status === "flag" || s.status === "missing");
     // PM-confirmed-but-unverified steps go in their own softer bucket.
     const hasUnverified = state.some((s) => s.status === "unverified");
+
+    // Upload the screenshot image ONLY for steps that flagged or were
+    // PM-confirmed — those are the ones a human might want to look at.
+    // Clean passes don't get their image stored, saving space.
+    const results = [];
+    for (const s of state) {
+      const step = checklist.steps.find((x) => x.id === s.stepId);
+      const base = {
+        text: step.text, group: step.group, evidence: step.evidence,
+        status: s.done ? s.status : "missing",
+        note: s.done ? s.note : "Step not completed.",
+        value: s.value,
+      };
+      const keepImage = s.file && (s.status === "flag" || s.status === "unverified");
+      if (keepImage) {
+        try {
+          const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${s.file.name}`.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const { error } = await supabase.storage.from("screenshots").upload(path, s.file);
+          if (!error) base.screenshotPath = path;
+        } catch (e) {
+          console.error("Screenshot upload failed:", e);
+          // Not fatal — the submission still saves, just without the stored image.
+        }
+      }
+      results.push(base);
+    }
+
     onSubmit({
       id: Date.now().toString(),
       checklistTitle: checklist.title,
       pm: pmName, property: property, time: "Just now", needsReview, hasUnverified,
-      results: state.map((s) => { const step = checklist.steps.find((x) => x.id === s.stepId); return { text: step.text, group: step.group, evidence: step.evidence, status: s.done ? s.status : "missing", note: s.done ? s.note : "Step not completed.", value: s.value }; }),
+      results,
     });
   };
 
@@ -743,7 +772,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
 
       <div style={{ marginTop: 22, display: "flex", justifyContent: "flex-end", gap: 12, alignItems: "center" }}>
         {!allDone && <span style={{ fontSize: 13, color: C.sub }}>Complete all steps to submit</span>}
-        <button className="btn-primary" onClick={submit} disabled={!allDone} style={{ opacity: allDone ? 1 : 0.5, padding: "11px 24px" }}>Submit for oversight</button>
+        <button className="btn-primary" onClick={submit} disabled={!allDone || submitting} style={{ opacity: (allDone && !submitting) ? 1 : 0.5, padding: "11px 24px" }}>{submitting ? "Submitting…" : "Submit for oversight"}</button>
       </div>
     </div>
   );
@@ -776,6 +805,7 @@ function ReviewModal({ submission, onClose, onDelete }) {
                     <span className="pill" style={{ background: sm.bg, color: sm.color, flexShrink: 0, height: "fit-content" }}><sm.Icon size={12} /> {sm.label}</span>
                   </div>
                   <div style={{ fontSize: 12, color: C.sub, marginTop: 5 }}>{r.note}{r.value ? ` · ${r.value}` : ""}</div>
+                  {r.screenshotPath && <ScreenshotViewer path={r.screenshotPath} />}
                 </div>
               </React.Fragment>
             );
@@ -796,6 +826,37 @@ function ReviewModal({ submission, onClose, onDelete }) {
         )}
       </div>
     </div>
+  );
+}
+
+function ScreenshotViewer({ path }) {
+  const [url, setUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    setFailed(false);
+    // Private bucket: create a short-lived signed URL to view the image.
+    const { data, error } = await supabase.storage.from("screenshots").createSignedUrl(path, 300);
+    setLoading(false);
+    if (error || !data?.signedUrl) { setFailed(true); return; }
+    setUrl(data.signedUrl);
+  };
+
+  if (url) {
+    return (
+      <div style={{ marginTop: 8 }}>
+        <img src={url} alt="Screenshot evidence" style={{ maxWidth: "100%", borderRadius: 8, border: `1px solid ${C.line}` }} />
+      </div>
+    );
+  }
+
+  return (
+    <button className="btn-ghost" onClick={load} disabled={loading}
+      style={{ marginTop: 8, fontSize: 12, padding: "6px 11px", display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <Eye size={13} /> {loading ? "Loading…" : failed ? "Couldn't load — retry" : "View screenshot"}
+    </button>
   );
 }
 
