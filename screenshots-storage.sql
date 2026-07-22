@@ -36,3 +36,12 @@ create policy "boss can delete screenshots"
   on storage.objects for delete
   to authenticated
   using (bucket_id = 'screenshots' and is_boss());
+
+-- ---------------------------------------------------------------------
+--  Allow a PM to delete screenshot files they uploaded (needed so that
+--  when a PM deletes their own submission, its screenshots go too).
+-- ---------------------------------------------------------------------
+create policy "owner can delete own screenshots"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'screenshots' and owner = auth.uid());

@@ -12,19 +12,34 @@ import Tesseract from "tesseract.js";
 async function checkAddressInImage(file, propertyAddress) {
   try {
     const { data } = await Tesseract.recognize(file, "eng");
-    const text = (data?.text || "").toLowerCase();
-    if (text.trim().length < 3) return "unreadable";
+    const raw = (data?.text || "").toLowerCase();
+    if (raw.trim().length < 3) return "unreadable";
 
-    // Compare using the distinctive parts of the address (number + street name),
-    // ignoring common words, so "16B Rutland Road" matches even if the suburb
-    // isn't shown.
-    const stop = new Set(["road", "rd", "street", "st", "avenue", "ave", "lane", "ln", "drive", "dr", "place", "pl", "unit", "flat"]);
-    const parts = propertyAddress.toLowerCase().split(/[\s,]+/).filter((p) => p.length > 1 && !stop.has(p));
-    if (parts.length === 0) return "not_found";
+    // Normalise: keep letters/numbers/spaces only, collapse whitespace.
+    const text = raw.replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ");
 
-    const hits = parts.filter((p) => text.includes(p)).length;
-    // Consider it a match if most of the distinctive parts are present.
-    return hits / parts.length >= 0.5 ? "found" : "not_found";
+    // Distinctive tokens from the address, ignoring generic words. We split a
+    // unit-prefixed number like "22a" into both "22a" and "22" so it matches
+    // Palace showing street number "22" and unit "A" in separate fields.
+    const stop = new Set(["road","rd","street","st","avenue","ave","lane","ln","drive","dr","place","pl","unit","flat","auckland","nz","new","zealand"]);
+    const rawTokens = propertyAddress.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+    const tokens = new Set();
+    rawTokens.forEach((t) => {
+      if (t.length <= 1 || stop.has(t)) return;
+      tokens.add(t);
+      const m = t.match(/^(\d+)([a-z])$/); // "22a" -> also add "22"
+      if (m) tokens.add(m[1]);
+    });
+    const list = [...tokens];
+    if (list.length === 0) return "not_found";
+
+    // Count how many distinctive tokens appear anywhere in the image text.
+    const hits = list.filter((t) => new RegExp(`\\b${t}\\b`).test(text)).length;
+
+    // Lenient: a street number/name plus one more token is a strong signal even
+    // when Palace scatters the address across separate fields.
+    if (hits >= 2 || hits / list.length >= 0.4) return "found";
+    return "not_found";
   } catch (e) {
     console.error("OCR failed:", e);
     return "unreadable";
@@ -203,13 +218,25 @@ function MainApp({ session, role, userEmail }) {
   const signOut = async () => { await supabase.auth.signOut(); };
 
   const deleteSubmission = async (id) => {
+    // Find the submission so we can also clean up its stored screenshots.
+    const sub = submissions.find((s) => s.id === id);
+    const paths = (sub?.results || [])
+      .map((r) => r.screenshotPath)
+      .filter(Boolean);
+
+    // Remove the stored screenshot files first (if any), so they don't get
+    // orphaned in storage.
+    if (paths.length > 0) {
+      const { error: storageErr } = await supabase.storage.from("screenshots").remove(paths);
+      if (storageErr) console.error("Could not remove screenshot files:", storageErr.message);
+    }
+
     const { error } = await supabase.from("submissions").delete().eq("id", id);
     if (error) {
       console.error("Could not delete submission:", error.message);
       alert("Couldn't delete this submission. Please try again.");
       return;
     }
-    // Remove it from the on-screen list.
     setSubmissions((prev) => prev.filter((s) => s.id !== id));
     setReviewing(null);
   };
@@ -652,20 +679,17 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
         value: s.value,
       };
       const keepImage = s.file && (s.status === "flag" || s.status === "unverified");
-      console.log("[submit] step:", step.text.slice(0, 30), "| status:", s.status, "| hasFile:", !!s.file, "| willUpload:", keepImage);
       if (keepImage) {
         try {
           const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${s.file.name}`.replace(/[^a-zA-Z0-9._-]/g, "_");
-          console.log("[submit] uploading to:", path);
-          const { data, error } = await supabase.storage.from("screenshots").upload(path, s.file);
+          const { error } = await supabase.storage.from("screenshots").upload(path, s.file);
           if (error) {
-            console.error("[submit] upload REJECTED:", error.message, error);
+            console.error("Screenshot upload rejected:", error.message);
           } else {
-            console.log("[submit] upload OK:", data?.path);
             base.screenshotPath = path;
           }
         } catch (e) {
-          console.error("[submit] upload threw:", e);
+          console.error("Screenshot upload failed:", e);
           // Not fatal — the submission still saves, just without the stored image.
         }
       }
