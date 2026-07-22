@@ -406,6 +406,8 @@ function MainApp({ session, role, userEmail }) {
             pm: row.pm_name,
             property: row.property_address,
             time: new Date(row.created_at).toLocaleString(),
+            createdMs: new Date(row.created_at).getTime(),
+            isMine: row.user_id === session.user.id,
             needsReview: row.needs_review,
             hasUnverified: row.has_unverified,
             results: row.results,
@@ -420,27 +422,46 @@ function MainApp({ session, role, userEmail }) {
   const startTask = (cl) => { setActiveChecklist(cl); setView("do"); };
 
   const submitTask = async (submission) => {
-    // Save to the database. user_id is set automatically by a database
-    // default, so the row is tied to whoever is signed in.
-    const { error } = await supabase.from("submissions").insert({
+    // Save to the database and get the created row back (with its real id and
+    // timestamp) so it can be sorted and deleted immediately without a refresh.
+    const { data, error } = await supabase.from("submissions").insert({
       checklist_title: submission.checklistTitle,
       pm_name: submission.pm,
       property_address: submission.property,
       results: submission.results,
       needs_review: submission.needsReview,
       has_unverified: submission.hasUnverified,
-    });
+    }).select().single();
     if (error) {
       console.error("Could not save submission:", error.message);
       alert("Something went wrong saving this checklist. Please try submitting again.");
       return;
     }
-    setSubmissions((s) => [submission, ...s]);
+    const saved = {
+      ...submission,
+      id: data.id,
+      time: new Date(data.created_at).toLocaleString(),
+      createdMs: new Date(data.created_at).getTime(),
+      isMine: true,
+    };
+    setSubmissions((s) => [saved, ...s]);
     setActiveChecklist(null);
     setView(isBoss ? "dashboard" : "do");
   };
 
   const signOut = async () => { await supabase.auth.signOut(); };
+
+  const deleteSubmission = async (id) => {
+    const { error } = await supabase.from("submissions").delete().eq("id", id);
+    if (error) {
+      console.error("Could not delete submission:", error.message);
+      alert("Couldn't delete this submission. Please try again.");
+      return;
+    }
+    // Remove it from the on-screen list.
+    setSubmissions((prev) => prev.filter((s) => s.id !== id));
+    setReviewing(null);
+  };
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: C.bg, minHeight: "100vh", color: C.ink }}>
@@ -490,19 +511,22 @@ function MainApp({ session, role, userEmail }) {
         </aside>
 
         <main style={{ flex: 1, padding: "30px 34px", maxWidth: 1000 }}>
-          {view === "dashboard" && <Dashboard submissions={submissions} loading={loadingSubmissions} onReview={setReviewing} isBoss={isBoss} />}
+          {view === "dashboard" && <Dashboard submissions={submissions} loading={loadingSubmissions} onReview={setReviewing} isBoss={isBoss} onDelete={deleteSubmission} />}
           {view === "do" && !activeChecklist && <PickTask checklists={checklists} onPick={startTask} />}
           {view === "do" && activeChecklist && <DoTask checklist={activeChecklist} onSubmit={submitTask} onBack={() => setActiveChecklist(null)} defaultName={userEmail} />}
           {view === "build" && isBoss && <Builder checklists={checklists} setChecklists={setChecklists} />}
         </main>
       </div>
 
-      {reviewing && <ReviewModal submission={reviewing} onClose={() => setReviewing(null)} />}
+      {reviewing && <ReviewModal submission={reviewing} onClose={() => setReviewing(null)} onDelete={(isBoss || reviewing.isMine) ? deleteSubmission : null} />}
     </div>
   );
 }
 
-function Dashboard({ submissions, loading, onReview, isBoss }) {
+function Dashboard({ submissions, loading, onReview, isBoss, onDelete }) {
+  const [filter, setFilter] = useState("all");   // all | review | confirmed | cleared
+  const [sortNewest, setSortNewest] = useState(true);
+
   const stats = useMemo(() => {
     let flagged = 0, clean = 0, unverified = 0;
     submissions.forEach((s) => {
@@ -513,10 +537,29 @@ function Dashboard({ submissions, loading, onReview, isBoss }) {
     return { total: submissions.length, flagged, clean, unverified };
   }, [submissions]);
 
-  // Split into three groups for display.
-  const needsReview = submissions.filter((s) => s.needsReview);
-  const pmConfirmed = submissions.filter((s) => !s.needsReview && s.hasUnverified);
-  const clean = submissions.filter((s) => !s.needsReview && !s.hasUnverified);
+  // Sort a copy by the chosen order. Submissions carry a createdMs for sorting.
+  const sorted = useMemo(() => {
+    const arr = [...submissions];
+    arr.sort((a, b) => sortNewest ? (b.createdMs - a.createdMs) : (a.createdMs - b.createdMs));
+    return arr;
+  }, [submissions, sortNewest]);
+
+  // Split into the three groups (order already applied).
+  const needsReview = sorted.filter((s) => s.needsReview);
+  const pmConfirmed = sorted.filter((s) => !s.needsReview && s.hasUnverified);
+  const clean = sorted.filter((s) => !s.needsReview && !s.hasUnverified);
+
+  // Which sections to show based on the filter.
+  const showReview = filter === "all" || filter === "review";
+  const showConfirmed = (filter === "all" || filter === "confirmed") && isBoss;
+  const showCleared = filter === "all" || filter === "cleared";
+
+  const filters = [
+    { key: "all", label: "All" },
+    { key: "review", label: "Needs review" },
+    ...(isBoss ? [{ key: "confirmed", label: "PM-confirmed" }] : []),
+    { key: "cleared", label: "Cleared" },
+  ];
 
   return (
     <div>
@@ -524,11 +567,30 @@ function Dashboard({ submissions, loading, onReview, isBoss }) {
         title={isBoss ? "Oversight" : "My submissions"}
         sub={isBoss ? "Genuine flags are at the top. PM-confirmed items sit in their own section below." : "The checklists you have submitted. Anything flagged is shown at the top."}
       />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 20 }}>
         <Stat label="Submissions" value={stats.total} />
         <Stat label="Need review" value={stats.flagged} accent={stats.flagged ? C.flag : C.sub} />
         <Stat label="PM-confirmed" value={stats.unverified} accent={stats.unverified ? "#8a6d1a" : C.sub} />
       </div>
+
+      {/* Filter + sort bar */}
+      {!loading && submissions.length > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {filters.map((f) => (
+              <button key={f.key} onClick={() => setFilter(f.key)}
+                style={{ padding: "7px 14px", borderRadius: 999, fontSize: 13, fontWeight: 600, border: `1px solid ${filter === f.key ? C.teal : C.line}`,
+                  background: filter === f.key ? C.teal : "#fff", color: filter === f.key ? "#fff" : C.sub, cursor: "pointer" }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setSortNewest((v) => !v)} className="btn-ghost" style={{ fontSize: 13 }}>
+            {sortNewest ? "Newest first" : "Oldest first"}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="card" style={{ padding: 40, textAlign: "center", color: C.sub }}>Loading submissions…</div>
       ) : submissions.length === 0 ? (
@@ -537,19 +599,19 @@ function Dashboard({ submissions, loading, onReview, isBoss }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          {needsReview.length > 0 && (
+          {showReview && needsReview.length > 0 && (
             <Section title="Needs review" hint="Reuse detected, failed checks, or missing steps.">
-              {needsReview.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} />)}
+              {needsReview.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} onDelete={onDelete} canDelete={isBoss || s.isMine} />)}
             </Section>
           )}
-          {isBoss && pmConfirmed.length > 0 && (
+          {showConfirmed && pmConfirmed.length > 0 && (
             <Section title="PM-confirmed, address not auto-verified" hint="The screenshot didn't show the address; the PM gave a reason. Spot-check only if you want to.">
-              {pmConfirmed.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} />)}
+              {pmConfirmed.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} onDelete={onDelete} canDelete={isBoss || s.isMine} />)}
             </Section>
           )}
-          {clean.length > 0 && (
+          {showCleared && clean.length > 0 && (
             <Section title="Cleared" hint="Passed all checks.">
-              {clean.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} />)}
+              {clean.map((s) => <SubmissionRow key={s.id} s={s} onReview={onReview} onDelete={onDelete} canDelete={isBoss || s.isMine} />)}
             </Section>
           )}
         </div>
@@ -568,13 +630,14 @@ function Section({ title, hint, children }) {
   );
 }
 
-function SubmissionRow({ s, onReview }) {
+function SubmissionRow({ s, onReview, onDelete, canDelete }) {
+  const [confirming, setConfirming] = useState(false);
   const flagged = s.results.filter((r) => r.status === "flag" || r.status === "missing").length;
   const confirmed = s.results.filter((r) => r.status === "unverified").length;
   const borderColor = s.needsReview ? C.flag : s.hasUnverified ? "#c99a3a" : C.pass;
   return (
     <div className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 16, borderLeft: `4px solid ${borderColor}` }}>
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 15 }}>{s.checklistTitle}</div>
         <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>{s.pm} · {s.property} · {s.time}</div>
       </div>
@@ -586,6 +649,17 @@ function SubmissionRow({ s, onReview }) {
         <span className="pill" style={{ background: C.passBg, color: C.pass }}><CheckCircle2 size={13} /> All passed</span>
       )}
       <button className="btn-ghost" onClick={() => onReview(s)} style={{ display: "flex", alignItems: "center", gap: 6 }}><Eye size={15} /> View</button>
+      {canDelete && (
+        confirming ? (
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: C.miss }}>Delete?</span>
+            <button className="btn-ghost" onClick={() => onDelete(s.id)} style={{ color: C.miss, borderColor: C.miss, padding: "6px 10px" }}>Yes</button>
+            <button className="btn-ghost" onClick={() => setConfirming(false)} style={{ padding: "6px 10px" }}>No</button>
+          </div>
+        ) : (
+          <button className="btn-ghost" onClick={() => setConfirming(true)} title="Delete submission" style={{ padding: "9px 11px", color: C.sub }}><Trash2 size={15} /></button>
+        )
+      )}
     </div>
   );
 }
@@ -918,10 +992,11 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
   );
 }
 
-function ReviewModal({ submission, onClose }) {
+function ReviewModal({ submission, onClose, onDelete }) {
+  const [confirming, setConfirming] = useState(false);
   let lastGroup = null;
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,42,67,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,31,73,0.4)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
       <div onClick={(e) => e.stopPropagation()} className="card" style={{ maxWidth: 640, width: "100%", maxHeight: "85vh", overflow: "auto", padding: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
           <div>
@@ -949,6 +1024,19 @@ function ReviewModal({ submission, onClose }) {
             );
           })}
         </div>
+        {onDelete && (
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "flex-end" }}>
+            {confirming ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 13, color: C.miss }}>Delete this submission permanently?</span>
+                <button className="btn-ghost" onClick={() => onDelete(submission.id)} style={{ color: C.miss, borderColor: C.miss }}>Yes, delete</button>
+                <button className="btn-ghost" onClick={() => setConfirming(false)}>Cancel</button>
+              </div>
+            ) : (
+              <button className="btn-ghost" onClick={() => setConfirming(true)} style={{ color: C.miss, display: "flex", alignItems: "center", gap: 6 }}><Trash2 size={15} /> Delete</button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
