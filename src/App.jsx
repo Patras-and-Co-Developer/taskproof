@@ -505,6 +505,38 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       reader.readAsDataURL(file);
     });
 
+  // Shrink an image before sending to the AI, to keep token cost low.
+  // Resizes so the longest side is ~1200px (text stays readable) and
+  // compresses to JPEG. Falls back to the original if anything goes wrong.
+  const shrinkImage = (file) =>
+    new Promise((resolve) => {
+      try {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const maxSide = 1200;
+          let { width, height } = img;
+          const scale = Math.min(1, maxSide / Math.max(width, height));
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          URL.revokeObjectURL(url);
+          canvas.toBlob(
+            (blob) => resolve(blob ? { blob, mime: "image/jpeg" } : { blob: file, mime: file.type }),
+            "image/jpeg",
+            0.8
+          );
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve({ blob: file, mime: file.type }); };
+        img.src = url;
+      } catch {
+        resolve({ blob: file, mime: file.type });
+      }
+    });
+
   // Fingerprint an image: a SHA-256 hash. Identical images give an identical
   // hash, so we can detect a screenshot that has been submitted before.
   // This runs entirely in the browser — free, no external service.
@@ -563,48 +595,54 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
         step_text: step.text,
       });
 
-      // --- Step 2: OCR address check (free) -----------------------------
-      // Read the text in the screenshot and see if it mentions the property
-      // address. If it clearly doesn't, we don't fail outright — we ask the PM
-      // to either upload a clearer screenshot or confirm with a reason.
+      // --- Step 2: OCR address check (free, first filter) ---------------
+      // If OCR finds the address, we accept the step WITHOUT calling the paid
+      // AI — this keeps the obvious/clean cases free.
       const addressResult = await checkAddressInImage(file, property);
 
-      if (addressResult !== "found") {
-        // Park the step in a "needs confirmation" state. The PM will either
-        // re-upload or confirm with a typed reason (handled by confirmUnverified).
+      if (addressResult === "found") {
         setState((prev) => {
           const n = [...prev];
-          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "" };
+          n[idx] = { ...n[idx], done: true, checking: false, status: "pass", note: "Passed reuse and address checks." };
           return n;
         });
         return;
       }
 
-      // --- Step 3: AI content check (optional) --------------------------
-      // If the AI service is available it gives a real pass/flag. If it's not
-      // set up or out of quota, we don't block the PM — the screenshot is
-      // accepted having passed the reuse and address checks.
-      let status = "pass";
-      let note = "Screenshot recorded. Address confirmed, passed reuse check.";
-
+      // --- Step 3: OCR couldn't confirm → escalate to Claude ------------
+      // Claude judges BOTH whether the screenshot matches the step AND
+      // whether it's the right property, in one lean call. We shrink the
+      // image first to minimise cost.
       try {
-        const imageBase64 = await fileToBase64(file);
+        const small = await shrinkImage(file);
+        const imageBase64 = await fileToBase64(small.blob);
         const { data, error } = await supabase.functions.invoke("check-screenshot", {
-          body: { imageBase64, imageMimeType: file.type, stepText: step.text, propertyAddress: property },
+          body: { imageBase64, imageMimeType: small.mime, stepText: step.text, propertyAddress: property },
         });
-        if (!error && data && data.status) {
-          status = data.status;
-          note = data.note;
-        }
-      } catch {
-        // AI check unavailable — leave as passed for manual review.
-      }
 
-      setState((prev) => {
-        const n = [...prev];
-        n[idx] = { ...n[idx], done: true, checking: false, status, note };
-        return n;
-      });
+        if (!error && data && (data.status === "pass" || data.status === "flag")) {
+          // Claude gave a real verdict.
+          setState((prev) => {
+            const n = [...prev];
+            n[idx] = { ...n[idx], done: true, checking: false, status: data.status, note: data.note };
+            return n;
+          });
+          return;
+        }
+        // Claude unavailable (no key / quota / error) → fall back to letting
+        // the PM confirm with a reason, since we couldn't auto-verify.
+        setState((prev) => {
+          const n = [...prev];
+          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "" };
+          return n;
+        });
+      } catch {
+        setState((prev) => {
+          const n = [...prev];
+          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "" };
+          return n;
+        });
+      }
     } catch (e) {
       console.error("Check failed:", e);
       setState((prev) => {
