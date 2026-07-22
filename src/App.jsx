@@ -327,8 +327,8 @@ function flatten(cl) {
 // function (see supabase/functions). No mock needed.
 
 const C = {
-  navy: "#0f2a43", navySoft: "#1c3d5a", teal: "#1f8a8a", tealSoft: "#e6f4f4",
-  bg: "#f4f6f8", card: "#ffffff", line: "#dce3ea", ink: "#0f2a43", sub: "#5b6b7a",
+  navy: "#001f49", navySoft: "#123156", teal: "#00adef", tealSoft: "#e4f6fe",
+  bg: "#f4f7fa", card: "#ffffff", line: "#d9e1ea", ink: "#001f49", sub: "#5b6b7a",
   pass: "#1f9d63", passBg: "#e7f5ee", flag: "#c9761a", flagBg: "#fbf0e2", miss: "#b23b3b", missBg: "#fbe9e9",
 };
 
@@ -453,7 +453,7 @@ function MainApp({ session, role, userEmail }) {
         .card { background:${C.card}; border:1px solid ${C.line}; border-radius:12px; }
         .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; }
         .btn-primary { background:${C.teal}; color:#fff; border:none; padding:10px 18px; border-radius:9px; font-weight:600; font-size:14px; }
-        .btn-primary:hover { background:#186f6f; }
+        .btn-primary:hover { background:#0090c8; }
         .btn-ghost { background:transparent; color:${C.sub}; border:1px solid ${C.line}; padding:9px 15px; border-radius:9px; font-weight:600; font-size:14px; }
         .btn-ghost:hover { background:#eef2f5; }
         input, textarea, select { font-family:inherit; }
@@ -461,11 +461,9 @@ function MainApp({ session, role, userEmail }) {
 
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <aside style={{ width: 232, background: C.navy, padding: "22px 16px", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.02em", padding: "4px 8px 22px", display: "flex", alignItems: "center", gap: 9 }}>
-            <div style={{ width: 26, height: 26, borderRadius: 7, background: C.teal, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <ClipboardList size={15} color="#fff" />
-            </div>
-            TaskProof
+          <div style={{ padding: "4px 8px 22px" }}>
+            <img src="/logo-white.svg" alt="Harcourts" style={{ height: 26, display: "block" }} />
+            <div style={{ color: C.teal, fontSize: 12, fontWeight: 600, letterSpacing: "0.08em", marginTop: 8, textTransform: "uppercase" }}>TaskProof</div>
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <button className={`navbtn ${view === "dashboard" ? "on" : ""}`} onClick={() => setView("dashboard")}>

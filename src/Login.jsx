@@ -3,8 +3,8 @@ import { ClipboardList } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
 const C = {
-  navy: "#0f2a43", teal: "#1f8a8a", bg: "#f4f6f8", card: "#ffffff",
-  line: "#dce3ea", ink: "#0f2a43", sub: "#5b6b7a", miss: "#b23b3b",
+  navy: "#001f49", teal: "#00adef", bg: "#f4f7fa", card: "#ffffff",
+  line: "#d9e1ea", ink: "#001f49", sub: "#5b6b7a", miss: "#b23b3b",
 };
 
 export default function Login() {
@@ -31,11 +31,9 @@ export default function Login() {
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: C.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "center", marginBottom: 22 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: C.teal, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <ClipboardList size={19} color="#fff" />
-          </div>
-          <span style={{ fontSize: 22, fontWeight: 700, color: C.navy, letterSpacing: "-0.02em" }}>TaskProof</span>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 24 }}>
+          <img src="/logo-navy.svg" alt="Harcourts" style={{ height: 34 }} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.teal, letterSpacing: "0.08em", textTransform: "uppercase" }}>TaskProof</span>
         </div>
 
         <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14, padding: 26 }}>
