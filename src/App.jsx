@@ -270,15 +270,19 @@ function MainApp({ session, role, userEmail }) {
               color: C.teal,
               marginTop: 4,
               letterSpacing: "0.005em",
+              // The "P" glyph carries ~0.0975em of left bearing; pull it back so
+              // its visual edge lines up with the logo's.
+              marginLeft: "-4.1px",
             }}>Patras &amp; Co</div>
             <div style={{
               fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
               fontWeight: 700,
               color: "#ffffff",
-              fontSize: 16,
-              letterSpacing: "0.16em",
-              marginTop: 14,
-              textTransform: "uppercase",
+              fontSize: 24,
+              letterSpacing: "0.02em",
+              marginTop: 12,
+              // Same correction for the "T" glyph (~0.025em).
+              marginLeft: "-0.6px",
             }}>TaskProof</div>
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>

@@ -41,15 +41,18 @@ export default function Login() {
             color: C.teal,
             marginTop: 5,
             letterSpacing: "0.005em",
+            // Left/right bearings differ, so centred text sits slightly right
+            // of true centre — nudge it back.
+            marginLeft: "-1.3px",
           }}>Patras &amp; Co</div>
           <span style={{
             fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
             fontWeight: 700,
-            fontSize: 17,
+            fontSize: 26,
             color: C.navy,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            marginTop: 16,
+            letterSpacing: "0.02em",
+            marginTop: 14,
+            marginLeft: "-0.7px",
           }}>TaskProof</span>
         </div>
 
