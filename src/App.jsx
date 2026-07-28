@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, AlertTriangle, Circle, Upload, Plus, Trash2, ChevronLeft, LayoutDashboard, ClipboardList, Settings, Hash, Camera, Check, X, Eye, LogOut } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Circle, Upload, Plus, Trash2, ChevronLeft, LayoutDashboard, ClipboardList, Settings, Hash, Camera, Check, X, Eye, LogOut, Menu } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import Login from "./Login.jsx";
 import Tesseract from "tesseract.js";
@@ -1024,6 +1024,12 @@ function ChecklistCard({ cl, onEdit, onDelete, busy }) {
 
 function ChecklistEditor({ initial, onSave, onCancel, busy }) {
   const [draft, setDraft] = useState(initial);
+  // Drag-and-drop reordering state.
+  // `grabbed` tracks whether the drag handle (not the text) was pressed, so
+  // dragging inside a text box doesn't start a row drag.
+  const [grabbed, setGrabbed] = useState(false);
+  const [dragFrom, setDragFrom] = useState(null); // { gi, si }
+  const [dragOver, setDragOver] = useState(null); // { gi, si }
 
   const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
   const setGroupName = (gi, name) => setDraft((d) => { const g = [...d.groups]; g[gi] = { ...g[gi], name }; return { ...d, groups: g }; });
@@ -1033,10 +1039,26 @@ function ChecklistEditor({ initial, onSave, onCancel, busy }) {
   const removeStep = (gi, si) => setDraft((d) => { const g = [...d.groups]; g[gi] = { ...g[gi], steps: g[gi].steps.filter((_, i) => i !== si) }; return { ...d, groups: g }; });
   const setStep = (gi, si, k, v) => setDraft((d) => { const g = [...d.groups]; const st = [...g[gi].steps]; st[si] = { ...st[si], [k]: v }; g[gi] = { ...g[gi], steps: st }; return { ...d, groups: g }; });
 
+  // Move a step from one position to another. Works within a section and
+  // across sections (drop onto a step in a different section to move it there).
+  const moveStep = (from, to) => {
+    if (!from || !to) return;
+    if (from.gi === to.gi && from.si === to.si) return;
+    setDraft((d) => {
+      const groups = d.groups.map((g) => ({ ...g, steps: [...g.steps] }));
+      const [moved] = groups[from.gi].steps.splice(from.si, 1);
+      if (!moved) return d;
+      groups[to.gi].steps.splice(to.si, 0, moved);
+      return { ...d, groups };
+    });
+  };
+
+  const endDrag = () => { setGrabbed(false); setDragFrom(null); setDragOver(null); };
+
   return (
     <div>
       <button className="btn-ghost" onClick={onCancel} style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><ChevronLeft size={16} /> Back to list</button>
-      <Header title={draft.id ? "Edit checklist" : "New checklist"} sub="Group steps under section headings. Each step has an evidence type." />
+      <Header title={draft.id ? "Edit checklist" : "New checklist"} sub="Group steps under section headings. Drag the ☰ handle to reorder a step, or drag it into another section." />
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: C.sub, display: "block", marginBottom: 6 }}>Title</label>
@@ -1054,20 +1076,48 @@ function ChecklistEditor({ initial, onSave, onCancel, busy }) {
               <button className="btn-ghost" onClick={() => removeGroup(gi)} style={{ padding: "9px 11px", color: C.sub }} title="Remove section"><Trash2 size={15} /></button>
             )}
           </div>
-          {g.steps.map((st, si) => (
-            <div key={si} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: C.teal, paddingTop: 9 }}>{si + 1}</span>
-              <div style={{ flex: 1 }}>
-                <input value={st.text} onChange={(e) => setStep(gi, si, "text", e.target.value)} placeholder="What must be done" style={{ ...inp, marginBottom: 8 }} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <select value={st.evidence} onChange={(e) => setStep(gi, si, "evidence", e.target.value)} style={{ ...inp, flex: 1 }}>
-                    {Object.entries(EVIDENCE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                  {g.steps.length > 1 && <button onClick={() => removeStep(gi, si)} className="btn-ghost" style={{ padding: "0 12px" }}><Trash2 size={15} /></button>}
+          {g.steps.map((st, si) => {
+            const isDragging = dragFrom && dragFrom.gi === gi && dragFrom.si === si;
+            const isOver = dragOver && dragOver.gi === gi && dragOver.si === si && !isDragging;
+            return (
+              <div
+                key={si}
+                draggable={grabbed}
+                onDragStart={() => setDragFrom({ gi, si })}
+                onDragEnter={() => { if (dragFrom) setDragOver({ gi, si }); }}
+                onDragOver={(e) => { if (dragFrom) e.preventDefault(); }}
+                onDrop={(e) => { e.preventDefault(); moveStep(dragFrom, { gi, si }); endDrag(); }}
+                onDragEnd={endDrag}
+                style={{
+                  display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10,
+                  opacity: isDragging ? 0.4 : 1,
+                  borderTop: isOver ? `2px solid ${C.teal}` : "2px solid transparent",
+                  paddingTop: 2,
+                  transition: "opacity .15s",
+                }}
+              >
+                {/* Drag handle — press and hold this to reorder the step */}
+                <span
+                  onMouseDown={() => setGrabbed(true)}
+                  onMouseUp={() => setGrabbed(false)}
+                  title="Drag to reorder"
+                  style={{ cursor: "grab", color: C.sub, paddingTop: 10, display: "flex", alignItems: "center", userSelect: "none" }}
+                >
+                  <Menu size={15} />
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: C.teal, paddingTop: 9 }}>{si + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <input value={st.text} onChange={(e) => setStep(gi, si, "text", e.target.value)} placeholder="What must be done" style={{ ...inp, marginBottom: 8 }} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select value={st.evidence} onChange={(e) => setStep(gi, si, "evidence", e.target.value)} style={{ ...inp, flex: 1 }}>
+                      {Object.entries(EVIDENCE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    {g.steps.length > 1 && <button onClick={() => removeStep(gi, si)} className="btn-ghost" style={{ padding: "0 12px" }}><Trash2 size={15} /></button>}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           <button onClick={() => addStep(gi)} className="btn-ghost" style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 4 }}><Plus size={14} /> Add step</button>
         </div>
       ))}
