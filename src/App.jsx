@@ -260,9 +260,21 @@ function MainApp({ session, role, userEmail }) {
 
       <div style={{ display: "flex", minHeight: "100vh" }}>
         <aside style={{ width: 232, background: C.navy, padding: "22px 16px", flexShrink: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "4px 8px 22px" }}>
-            <img src="/logo-white.svg" alt="Harcourts" style={{ height: 26, display: "block" }} />
-            <div style={{ color: C.teal, fontSize: 12, fontWeight: 600, letterSpacing: "0.08em", marginTop: 8, textTransform: "uppercase" }}>TaskProof</div>
+          <div style={{ padding: "6px 8px 26px" }}>
+            <img src="/logo-white.svg" alt="Harcourts" style={{ height: 34, display: "block" }} />
+            <div style={{
+              fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
+              fontWeight: 300,
+              fontSize: 20,
+              lineHeight: 1.05,
+              color: "#ffffff",
+              marginTop: 5,
+              letterSpacing: "0.005em",
+            }}>Patras &amp; Co</div>
+            <div style={{
+              color: C.teal, fontSize: 13, fontWeight: 700, letterSpacing: "0.14em",
+              marginTop: 12, textTransform: "uppercase",
+            }}>TaskProof</div>
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <button className={`navbtn ${view === "dashboard" ? "on" : ""}`} onClick={() => setView("dashboard")}>
