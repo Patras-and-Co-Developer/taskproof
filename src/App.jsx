@@ -259,21 +259,26 @@ function MainApp({ session, role, userEmail }) {
       `}</style>
 
       <div style={{ display: "flex", minHeight: "100vh" }}>
-        <aside style={{ width: 232, background: C.navy, padding: "22px 16px", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+        <aside style={{ width: 268, background: C.navy, padding: "22px 16px", flexShrink: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ padding: "6px 8px 26px" }}>
-            <img src="/logo-white.svg" alt="Harcourts" style={{ height: 34, display: "block" }} />
+            <img src="/logo-white.svg" alt="Harcourts" style={{ height: 44, display: "block" }} />
             <div style={{
               fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
               fontWeight: 300,
-              fontSize: 20,
-              lineHeight: 1.05,
-              color: "#ffffff",
-              marginTop: 5,
+              fontSize: 42,
+              lineHeight: 1,
+              color: C.teal,
+              marginTop: 4,
               letterSpacing: "0.005em",
             }}>Patras &amp; Co</div>
             <div style={{
-              color: C.teal, fontSize: 13, fontWeight: 700, letterSpacing: "0.14em",
-              marginTop: 12, textTransform: "uppercase",
+              fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
+              fontWeight: 700,
+              color: "#ffffff",
+              fontSize: 16,
+              letterSpacing: "0.16em",
+              marginTop: 14,
+              textTransform: "uppercase",
             }}>TaskProof</div>
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>

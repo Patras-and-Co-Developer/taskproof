@@ -31,20 +31,25 @@ export default function Login() {
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: C.bg, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 26 }}>
-          <img src="/logo-navy.svg" alt="Harcourts" style={{ height: 46 }} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28 }}>
+          <img src="/logo-navy.svg" alt="Harcourts" style={{ height: 56 }} />
           <div style={{
             fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
             fontWeight: 300,
-            fontSize: 27,
-            lineHeight: 1.05,
-            color: C.navy,
-            marginTop: 6,
+            fontSize: 53,
+            lineHeight: 1,
+            color: C.teal,
+            marginTop: 5,
             letterSpacing: "0.005em",
           }}>Patras &amp; Co</div>
           <span style={{
-            fontSize: 14, fontWeight: 700, color: C.teal, letterSpacing: "0.14em",
-            textTransform: "uppercase", marginTop: 14,
+            fontFamily: "'Source Sans 3', 'Source Sans Pro', system-ui, sans-serif",
+            fontWeight: 700,
+            fontSize: 17,
+            color: C.navy,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            marginTop: 16,
           }}>TaskProof</span>
         </div>
 
