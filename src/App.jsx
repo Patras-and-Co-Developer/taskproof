@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { CheckCircle2, AlertTriangle, Circle, Upload, Plus, Trash2, ChevronLeft, LayoutDashboard, ClipboardList, Settings, Hash, Camera, Check, X, Eye, LogOut, Menu } from "lucide-react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { CheckCircle2, AlertTriangle, Circle, Upload, Plus, Trash2, ChevronLeft, LayoutDashboard, ClipboardList, Settings, Hash, Camera, Check, X, Eye, LogOut, Menu, Clock } from "lucide-react";
 import { supabase } from "./supabaseClient";
 import Login from "./Login.jsx";
 import Tesseract from "tesseract.js";
@@ -153,6 +153,43 @@ function MainApp({ session, role, userEmail }) {
 
   useEffect(() => { loadChecklists(); }, []);
 
+  // Unfinished checklists (drafts). The database rules decide what comes
+  // back: a PM sees their own, the boss sees everyone's.
+  const [drafts, setDrafts] = useState([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(true);
+  const [resumingDraft, setResumingDraft] = useState(null);
+
+  const loadDrafts = async () => {
+    const { data, error } = await supabase
+      .from("drafts").select("*").order("updated_at", { ascending: false });
+    if (error) console.error("Could not load unfinished checklists:", error.message);
+    else setDrafts(data || []);
+    setLoadingDrafts(false);
+  };
+
+  useEffect(() => { loadDrafts(); }, []);
+
+  // Deleting an unfinished checklist also removes the screenshots taken for
+  // it and their reuse hashes (the hashes cascade), so those images can be
+  // used again later without being wrongly flagged as duplicates.
+  const deleteDraft = async (d) => {
+    if (d.uploaded_paths && d.uploaded_paths.length) {
+      const { error: sErr } = await supabase.storage.from("screenshots").remove(d.uploaded_paths);
+      if (sErr) console.error("Could not remove draft screenshots:", sErr.message);
+    }
+    const { error } = await supabase.from("drafts").delete().eq("id", d.id);
+    if (error) { alert("Couldn't delete that unfinished checklist."); return; }
+    setDrafts((prev) => prev.filter((x) => x.id !== d.id));
+  };
+
+  const resumeDraft = (d) => {
+    const cl = checklists.find((c) => c.id === d.checklist_id);
+    if (!cl) { alert("That checklist no longer exists."); return; }
+    setResumingDraft(d);
+    setActiveChecklist(cl);
+    setView("do");
+  };
+
   // Load submissions. The database rules (RLS) decide what comes back:
   // the boss gets everyone's, a PM gets only their own. The app doesn't
   // have to filter, the database does it, which is what makes it secure.
@@ -289,8 +326,14 @@ function MainApp({ session, role, userEmail }) {
             <button className={`navbtn ${view === "dashboard" ? "on" : ""}`} onClick={() => setView("dashboard")}>
               <LayoutDashboard size={17} /> {isBoss ? "Oversight" : "My submissions"}
             </button>
-            <button className={`navbtn ${view === "do" ? "on" : ""}`} onClick={() => { setActiveChecklist(null); setView("do"); }}>
+            <button className={`navbtn ${view === "do" ? "on" : ""}`} onClick={() => { setActiveChecklist(null); setResumingDraft(null); setView("do"); }}>
               <ClipboardList size={17} /> Do a task
+            </button>
+            <button className={`navbtn ${view === "unfinished" ? "on" : ""}`} onClick={() => { setActiveChecklist(null); setResumingDraft(null); setView("unfinished"); }}>
+              <Clock size={17} /> Unfinished
+              {drafts.length > 0 && (
+                <span style={{ marginLeft: "auto", background: C.teal, color: "#fff", borderRadius: 999, fontSize: 11, fontWeight: 700, padding: "1px 7px" }}>{drafts.length}</span>
+              )}
             </button>
             {/* Only the boss can create and edit checklists. */}
             {isBoss && (
@@ -312,7 +355,20 @@ function MainApp({ session, role, userEmail }) {
         <main style={{ flex: 1, padding: "30px 34px", maxWidth: 1000 }}>
           {view === "dashboard" && <Dashboard submissions={submissions} loading={loadingSubmissions} onReview={setReviewing} isBoss={isBoss} onDelete={deleteSubmission} />}
           {view === "do" && !activeChecklist && <PickTask checklists={checklists} onPick={startTask} loading={loadingChecklists} />}
-          {view === "do" && activeChecklist && <DoTask checklist={activeChecklist} onSubmit={submitTask} onBack={() => setActiveChecklist(null)} defaultName={userEmail} />}
+          {view === "do" && activeChecklist && (
+            <DoTask
+              key={resumingDraft ? resumingDraft.id : activeChecklist.id}
+              checklist={activeChecklist}
+              onSubmit={submitTask}
+              onBack={() => { setActiveChecklist(null); setResumingDraft(null); }}
+              defaultName={userEmail}
+              resumeDraft={resumingDraft}
+              onDraftChange={loadDrafts}
+            />
+          )}
+          {view === "unfinished" && (
+            <Unfinished drafts={drafts} loading={loadingDrafts} onResume={resumeDraft} onDelete={deleteDraft} isBoss={isBoss} />
+          )}
           {view === "build" && isBoss && <Builder checklists={checklists} reload={loadChecklists} />}
         </main>
       </div>
@@ -463,6 +519,80 @@ function SubmissionRow({ s, onReview, onDelete, canDelete }) {
   );
 }
 
+function Unfinished({ drafts, loading, onResume, onDelete, isBoss }) {
+  const daysLeft = (updatedAt) => {
+    const elapsed = (Date.now() - new Date(updatedAt).getTime()) / 86400000;
+    return Math.max(0, Math.ceil(30 - elapsed));
+  };
+
+  return (
+    <div>
+      <Header
+        title="Unfinished checklists"
+        sub={isBoss
+          ? "Checklists that were started but not submitted. Deleted automatically after 30 days."
+          : "Your started-but-not-submitted checklists. Deleted automatically after 30 days."}
+      />
+      {loading ? (
+        <div className="card" style={{ padding: 40, textAlign: "center", color: C.sub }}>Loading…</div>
+      ) : drafts.length === 0 ? (
+        <div className="card" style={{ padding: 40, textAlign: "center", color: C.sub }}>
+          Nothing unfinished. Anything you start appears here until you submit it.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {drafts.map((d) => {
+            const total = (d.state || []).length;
+            const doneCount = (d.state || []).filter((s) => s.done).length;
+            const left = daysLeft(d.updated_at);
+            const expiringSoon = left <= 7;
+            return (
+              <DraftRow key={d.id} d={d} total={total} doneCount={doneCount} left={left}
+                expiringSoon={expiringSoon} onResume={onResume} onDelete={onDelete} isBoss={isBoss} />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DraftRow({ d, total, doneCount, left, expiringSoon, onResume, onDelete, isBoss }) {
+  const [confirming, setConfirming] = useState(false);
+  const pct = total ? Math.round((doneCount / total) * 100) : 0;
+  return (
+    <div className="card" style={{ padding: "16px 18px", borderLeft: `4px solid ${expiringSoon ? C.flag : C.teal}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>{d.checklist_title}</div>
+          <div style={{ fontSize: 13, color: C.sub, marginTop: 2 }}>
+            {isBoss ? `${d.pm_name || "Unknown"} · ` : ""}{d.property_address || "No address"} · last worked on {new Date(d.updated_at).toLocaleString()}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <div style={{ flex: 1, maxWidth: 220, height: 5, background: C.line, borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", background: C.teal }} />
+            </div>
+            <span style={{ fontSize: 12, color: C.sub }}>{doneCount} of {total} steps</span>
+          </div>
+        </div>
+        <span className="pill" style={{ background: expiringSoon ? C.flagBg : "#eef2f5", color: expiringSoon ? C.flag : C.sub, flexShrink: 0 }}>
+          <Clock size={13} /> {left === 0 ? "Expires today" : `${left} day${left === 1 ? "" : "s"} left`}
+        </span>
+        <button className="btn-primary" onClick={() => onResume(d)}>Resume</button>
+        {confirming ? (
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: C.miss }}>Delete?</span>
+            <button className="btn-ghost" onClick={() => onDelete(d)} style={{ color: C.miss, borderColor: C.miss, padding: "6px 10px" }}>Yes</button>
+            <button className="btn-ghost" onClick={() => setConfirming(false)} style={{ padding: "6px 10px" }}>No</button>
+          </div>
+        ) : (
+          <button className="btn-ghost" onClick={() => setConfirming(true)} title="Delete unfinished checklist" style={{ padding: "9px 11px", color: C.sub }}><Trash2 size={15} /></button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PickTask({ checklists, onPick, loading }) {
   return (
     <div>
@@ -486,59 +616,60 @@ function PickTask({ checklists, onPick, loading }) {
   );
 }
 
-function DoTask({ checklist, onSubmit, onBack, defaultName }) {
-  const DRAFT_KEY = `taskproof-draft-${checklist.id}`;
-
+function DoTask({ checklist, onSubmit, onBack, defaultName, resumeDraft: incomingDraft, onDraftChange }) {
   const blankState = () => checklist.steps.map((st) => ({
     stepId: st.id, done: false, value: "", files: [], uploadedPaths: [],
     checking: false, needsConfirm: false, confirmReason: "", status: "pending", note: "",
   }));
 
-  const [pmName, setPmName] = useState(defaultName || "");
-  const [property, setProperty] = useState("");
-  const [started, setStarted] = useState(false);
+  // If we were opened by resuming an unfinished checklist, start from it.
+  const [pmName, setPmName] = useState(incomingDraft?.pm_name || defaultName || "");
+  const [property, setProperty] = useState(incomingDraft?.property_address || "");
+  const [started, setStarted] = useState(!!incomingDraft);
   const [submitting, setSubmitting] = useState(false);
-  const [state, setState] = useState(blankState);
-  const [draft, setDraft] = useState(null);       // an unfinished saved draft, if any
-  const [savedAt, setSavedAt] = useState(null);
+  const [state, setState] = useState(() =>
+    incomingDraft?.state?.length === checklist.steps.length
+      ? incomingDraft.state.map((s) => ({ ...s, files: [], checking: false }))
+      : blankState()
+  );
+  const [draftId, setDraftId] = useState(incomingDraft?.id || null);
+  const [savedAt, setSavedAt] = useState(incomingDraft ? Date.now() : null);
 
-  // ---- Progress saving -------------------------------------------------
-  // Look for unfinished progress when this checklist is opened.
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (raw) {
-        const d = JSON.parse(raw);
-        if (d && Array.isArray(d.state) && d.state.length === checklist.steps.length) setDraft(d);
-      }
-    } catch { /* ignore unreadable drafts */ }
-  }, []);
+  // Keep the latest draft id available inside callbacks without re-running them.
+  const draftIdRef = useRef(draftId);
+  useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
 
-  // Save progress whenever it changes. File objects can't be stored, but any
-  // screenshot for a non-passing step has already been uploaded by then, so
-  // its path is saved instead and nothing is lost.
+  // ---- Progress saving (database) --------------------------------------
+  // Saves are debounced so typing or ticking steps doesn't spam the database.
+  // File objects can't be stored, but any screenshot for a non-passing step
+  // has already been uploaded by then, so its path is saved instead.
   useEffect(() => {
-    if (!started) return;
-    try {
+    if (!started || submitting) return;
+    const t = setTimeout(async () => {
       const slim = state.map(({ files, checking, ...rest }) => rest);
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        pmName, property, state: slim, savedAt: Date.now(),
-      }));
-      setSavedAt(Date.now());
-    } catch { /* storage full or unavailable — not fatal */ }
-  }, [state, started, pmName, property]);
-
-  const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
-
-  const resumeDraft = () => {
-    setPmName(draft.pmName || defaultName || "");
-    setProperty(draft.property || "");
-    setState(draft.state.map((s) => ({ ...s, files: [], checking: false })));
-    setDraft(null);
-    setStarted(true);
-  };
-
-  const discardDraft = () => { clearDraft(); setDraft(null); };
+      const paths = state.flatMap((s) => s.uploadedPaths || []);
+      const row = {
+        checklist_id: checklist.id,
+        checklist_title: checklist.title,
+        pm_name: pmName,
+        property_address: property,
+        state: slim,
+        uploaded_paths: paths,
+        updated_at: new Date().toISOString(),
+      };
+      try {
+        if (draftIdRef.current) {
+          await supabase.from("drafts").update(row).eq("id", draftIdRef.current);
+        } else {
+          const { data, error } = await supabase.from("drafts").insert(row).select("id").single();
+          if (!error && data) { setDraftId(data.id); draftIdRef.current = data.id; }
+        }
+        setSavedAt(Date.now());
+        if (onDraftChange) onDraftChange();
+      } catch (e) { console.error("Could not save progress:", e); }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [state, started, pmName, property, submitting]);
 
   const done = state.filter((s) => s.done).length;
   const allDone = done === checklist.steps.length;
@@ -550,20 +681,6 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       <div>
         <button className="btn-ghost" onClick={onBack} style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><ChevronLeft size={16} /> Back</button>
         <Header title={checklist.title} sub="Enter your name and the property address to begin." />
-
-        {draft && (
-          <div className="card" style={{ padding: 18, maxWidth: 440, marginBottom: 16, borderLeft: `4px solid ${C.teal}` }}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Unfinished progress found</div>
-            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.5, marginBottom: 12 }}>
-              {draft.property || "Unknown property"} · {draft.state.filter((s) => s.done).length} of {checklist.steps.length} steps done
-              {draft.savedAt ? ` · saved ${new Date(draft.savedAt).toLocaleString()}` : ""}
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn-primary" onClick={resumeDraft}>Resume</button>
-              <button className="btn-ghost" onClick={discardDraft}>Start fresh</button>
-            </div>
-          </div>
-        )}
 
         <div className="card" style={{ padding: 22, maxWidth: 440 }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: C.sub, display: "block", marginBottom: 6 }}>Your name</label>
@@ -671,9 +788,10 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
         return;
       }
 
-      // Record the new fingerprints.
+      // Record the new fingerprints, tagged with this draft so they can be
+      // removed if the checklist is never finished (avoiding false reuse flags).
       await supabase.from("screenshot_hashes").insert(
-        hashes.map((h) => ({ hash: h, property_address: property, step_text: step.text }))
+        hashes.map((h) => ({ hash: h, property_address: property, step_text: step.text, draft_id: draftIdRef.current }))
       );
 
       // --- 2. OCR address check (free first filter) ----------------------
@@ -801,7 +919,17 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
       };
     });
 
-    clearDraft();
+    // The checklist is finished: detach its hashes from the draft so they
+    // become permanent (reuse detection must keep working forever), then
+    // remove the draft row itself.
+    if (draftIdRef.current) {
+      try {
+        await supabase.from("screenshot_hashes").update({ draft_id: null }).eq("draft_id", draftIdRef.current);
+        await supabase.from("drafts").delete().eq("id", draftIdRef.current);
+      } catch (e) { console.error("Could not clear draft:", e); }
+    }
+    if (onDraftChange) onDraftChange();
+
     onSubmit({
       id: Date.now().toString(),
       checklistTitle: checklist.title,
