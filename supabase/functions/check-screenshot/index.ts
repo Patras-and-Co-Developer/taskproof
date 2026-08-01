@@ -28,9 +28,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { imageBase64, imageMimeType, stepText, propertyAddress } = await req.json();
+    const body = await req.json();
+    const { stepText, propertyAddress } = body;
+    // Accept either a list of images (new) or a single image (older callers).
+    const images = Array.isArray(body.images) && body.images.length
+      ? body.images
+      : (body.imageBase64 ? [{ data: body.imageBase64, mime: body.imageMimeType }] : []);
 
-    if (!imageBase64 || !stepText || !propertyAddress) {
+    if (images.length === 0 || !stepText || !propertyAddress) {
       return json({ status: "flag", note: "Missing image, step, or property address." });
     }
     if (!ANTHROPIC_API_KEY) {
@@ -42,9 +47,12 @@ Deno.serve(async (req) => {
       `Property management evidence check.\n` +
       `Step required: "${stepText}"\n` +
       `Property: "${propertyAddress}"\n` +
-      `Look at the screenshot. Reply ONLY with JSON: ` +
+      (images.length > 1
+        ? `${images.length} files are attached; together they should evidence the step. `
+        : ``) +
+      `Reply ONLY with JSON: ` +
       `{"status":"pass","note":"<=8 words"} or {"status":"flag","note":"<=8 words"}. ` +
-      `Flag if it doesn't show the step being done, or is clearly a different property. ` +
+      `Flag if the evidence doesn't show the step being done, or is clearly a different property. ` +
       `If no address is visible, judge on the step content alone.`;
 
     const res = await fetch(ANTHROPIC_URL, {
@@ -61,7 +69,10 @@ Deno.serve(async (req) => {
           {
             role: "user",
             content: [
-              { type: "image", source: { type: "base64", media_type: imageMimeType || "image/png", data: imageBase64 } },
+              ...images.map((im) => ({
+                type: "image",
+                source: { type: "base64", media_type: im.mime || "image/png", data: im.data },
+              })),
               { type: "text", text: prompt },
             ],
           },

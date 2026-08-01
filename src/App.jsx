@@ -221,7 +221,7 @@ function MainApp({ session, role, userEmail }) {
     // Find the submission so we can also clean up its stored screenshots.
     const sub = submissions.find((s) => s.id === id);
     const paths = (sub?.results || [])
-      .map((r) => r.screenshotPath)
+      .flatMap((r) => (r.screenshotPaths && r.screenshotPaths.length ? r.screenshotPaths : (r.screenshotPath ? [r.screenshotPath] : [])))
       .filter(Boolean);
 
     // Remove the stored screenshot files first (if any), so they don't get
@@ -487,23 +487,84 @@ function PickTask({ checklists, onPick, loading }) {
 }
 
 function DoTask({ checklist, onSubmit, onBack, defaultName }) {
+  const DRAFT_KEY = `taskproof-draft-${checklist.id}`;
+
+  const blankState = () => checklist.steps.map((st) => ({
+    stepId: st.id, done: false, value: "", files: [], uploadedPaths: [],
+    checking: false, needsConfirm: false, confirmReason: "", status: "pending", note: "",
+  }));
+
   const [pmName, setPmName] = useState(defaultName || "");
   const [property, setProperty] = useState("");
   const [started, setStarted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [state, setState] = useState(() => checklist.steps.map((st) => ({ stepId: st.id, done: false, value: "", file: null, checking: false, needsConfirm: false, confirmReason: "", status: "pending", note: "" })));
+  const [state, setState] = useState(blankState);
+  const [draft, setDraft] = useState(null);       // an unfinished saved draft, if any
+  const [savedAt, setSavedAt] = useState(null);
+
+  // ---- Progress saving -------------------------------------------------
+  // Look for unfinished progress when this checklist is opened.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d && Array.isArray(d.state) && d.state.length === checklist.steps.length) setDraft(d);
+      }
+    } catch { /* ignore unreadable drafts */ }
+  }, []);
+
+  // Save progress whenever it changes. File objects can't be stored, but any
+  // screenshot for a non-passing step has already been uploaded by then, so
+  // its path is saved instead and nothing is lost.
+  useEffect(() => {
+    if (!started) return;
+    try {
+      const slim = state.map(({ files, checking, ...rest }) => rest);
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        pmName, property, state: slim, savedAt: Date.now(),
+      }));
+      setSavedAt(Date.now());
+    } catch { /* storage full or unavailable — not fatal */ }
+  }, [state, started, pmName, property]);
+
+  const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch {} };
+
+  const resumeDraft = () => {
+    setPmName(draft.pmName || defaultName || "");
+    setProperty(draft.property || "");
+    setState(draft.state.map((s) => ({ ...s, files: [], checking: false })));
+    setDraft(null);
+    setStarted(true);
+  };
+
+  const discardDraft = () => { clearDraft(); setDraft(null); };
+
   const done = state.filter((s) => s.done).length;
   const allDone = done === checklist.steps.length;
 
-  // Require a name and property address before any steps are shown.
-  // The address is also what the AI cross-check will use later to confirm
-  // screenshots match the right property.
+  // ---- Start screen ----------------------------------------------------
   if (!started) {
     const canBegin = pmName.trim().length > 1 && property.trim().length > 4;
     return (
       <div>
         <button className="btn-ghost" onClick={onBack} style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><ChevronLeft size={16} /> Back</button>
         <Header title={checklist.title} sub="Enter your name and the property address to begin." />
+
+        {draft && (
+          <div className="card" style={{ padding: 18, maxWidth: 440, marginBottom: 16, borderLeft: `4px solid ${C.teal}` }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Unfinished progress found</div>
+            <div style={{ fontSize: 13, color: C.sub, lineHeight: 1.5, marginBottom: 12 }}>
+              {draft.property || "Unknown property"} · {draft.state.filter((s) => s.done).length} of {checklist.steps.length} steps done
+              {draft.savedAt ? ` · saved ${new Date(draft.savedAt).toLocaleString()}` : ""}
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn-primary" onClick={resumeDraft}>Resume</button>
+              <button className="btn-ghost" onClick={discardDraft}>Start fresh</button>
+            </div>
+          </div>
+        )}
+
         <div className="card" style={{ padding: 22, maxWidth: 440 }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: C.sub, display: "block", marginBottom: 6 }}>Your name</label>
           <input value={pmName} onChange={(e) => setPmName(e.target.value)} placeholder="e.g. Josh" style={{ width: "100%", padding: "10px 12px", border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 14, marginBottom: 16 }} />
@@ -517,20 +578,19 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
     );
   }
 
-  // Turn an uploaded file into base64 so it can be sent to the check function.
+  // ---- Helpers ---------------------------------------------------------
   const fileToBase64 = (file) =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(",")[1]); // strip the data: prefix
+      reader.onload = () => resolve(reader.result.split(",")[1]);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
 
   // Shrink an image before sending to the AI, to keep token cost low.
-  // Resizes so the longest side is ~1200px (text stays readable) and
-  // compresses to JPEG. Falls back to the original if anything goes wrong.
   const shrinkImage = (file) =>
     new Promise((resolve) => {
+      if (!file.type.startsWith("image/")) { resolve({ blob: file, mime: file.type }); return; }
       try {
         const img = new Image();
         const url = URL.createObjectURL(file);
@@ -538,90 +598,94 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
           const maxSide = 1200;
           let { width, height } = img;
           const scale = Math.min(1, maxSide / Math.max(width, height));
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
+          width = Math.round(width * scale); height = Math.round(height * scale);
           const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = width; canvas.height = height;
           canvas.getContext("2d").drawImage(img, 0, 0, width, height);
           URL.revokeObjectURL(url);
           canvas.toBlob(
             (blob) => resolve(blob ? { blob, mime: "image/jpeg" } : { blob: file, mime: file.type }),
-            "image/jpeg",
-            0.8
+            "image/jpeg", 0.8
           );
         };
         img.onerror = () => { URL.revokeObjectURL(url); resolve({ blob: file, mime: file.type }); };
         img.src = url;
-      } catch {
-        resolve({ blob: file, mime: file.type });
-      }
+      } catch { resolve({ blob: file, mime: file.type }); }
     });
 
-  // Fingerprint an image: a SHA-256 hash. Identical images give an identical
-  // hash, so we can detect a screenshot that has been submitted before.
-  // This runs entirely in the browser — free, no external service.
   const hashFile = async (file) => {
     const buffer = await file.arrayBuffer();
     const digest = await crypto.subtle.digest("SHA-256", buffer);
-    return Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
   };
 
-  const complete = async (idx, step, overrideFile) => {
-    // Tick steps and reference steps: no image to check, mark done directly.
+  const uploadFiles = async (files) => {
+    const paths = [];
+    for (const f of files) {
+      try {
+        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${f.name}`.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const { error } = await supabase.storage.from("screenshots").upload(path, f);
+        if (error) console.error("Upload rejected:", error.message);
+        else paths.push(path);
+      } catch (e) { console.error("Upload failed:", e); }
+    }
+    return paths;
+  };
+
+  const removeUploaded = async (paths) => {
+    if (paths && paths.length) {
+      try { await supabase.storage.from("screenshots").remove(paths); } catch { /* best effort */ }
+    }
+  };
+
+  // ---- Completing a step -----------------------------------------------
+  const complete = async (idx, step, overrideFiles) => {
     if (step.evidence !== "screenshot") {
-      setState((prev) => {
-        const next = [...prev];
-        next[idx] = { ...next[idx], done: true, status: "pass", note: "Confirmed." };
-        return next;
-      });
+      setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], done: true, status: "pass", note: "Confirmed." }; return n; });
       return;
     }
 
-    // Use the override file (from a "replace screenshot" redo) if given,
-    // otherwise the file already attached to this step.
-    const file = overrideFile || state[idx].file;
-    if (!file) return; // button is disabled without a file
+    const files = overrideFiles || state[idx].files;
+    if (!files || files.length === 0) return;
 
     setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], checking: true }; return n; });
 
     try {
-      // --- Step 1: Reuse detection (free, always runs) -------------------
-      const hash = await hashFile(file);
+      // --- 1. Reuse detection across every attached file (free) ----------
+      const hashes = [];
+      for (const f of files) hashes.push(await hashFile(f));
 
-      // Has this exact image been submitted before?
       const { data: matches } = await supabase
-        .from("screenshot_hashes")
-        .select("property_address, created_at")
-        .eq("hash", hash)
-        .limit(1);
+        .from("screenshot_hashes").select("id").in("hash", hashes).limit(1);
 
       if (matches && matches.length > 0) {
-        // Reused screenshot — flag it and stop here.
+        const paths = await uploadFiles(files);
         setState((prev) => {
           const n = [...prev];
-          n[idx] = { ...n[idx], done: true, checking: false, status: "flag",
-            note: "This screenshot has already been used before. Possible reuse — needs review." };
+          n[idx] = { ...n[idx], done: true, checking: false, status: "flag", uploadedPaths: paths,
+            note: files.length > 1
+              ? "One of these files has already been used before. Possible reuse — needs review."
+              : "This screenshot has already been used before. Possible reuse — needs review." };
           return n;
         });
         return;
       }
 
-      // New image — record its fingerprint so future uploads are checked against it.
-      await supabase.from("screenshot_hashes").insert({
-        hash,
-        property_address: property,
-        step_text: step.text,
-      });
+      // Record the new fingerprints.
+      await supabase.from("screenshot_hashes").insert(
+        hashes.map((h) => ({ hash: h, property_address: property, step_text: step.text }))
+      );
 
-      // --- Step 2: OCR address check (free, first filter) ---------------
-      // If OCR finds the address, we accept the step WITHOUT calling the paid
-      // AI — this keeps the obvious/clean cases free.
-      const addressResult = await checkAddressInImage(file, property);
+      // --- 2. OCR address check (free first filter) ----------------------
+      // If ANY attached file shows the address, that's enough to confirm the
+      // property, so we accept without paying for an AI call.
+      let addressFound = false;
+      for (const f of files) {
+        if (!f.type.startsWith("image/")) continue;
+        if ((await checkAddressInImage(f, property)) === "found") { addressFound = true; break; }
+      }
 
-      if (addressResult === "found") {
+      if (addressFound) {
         setState((prev) => {
           const n = [...prev];
           n[idx] = { ...n[idx], done: true, checking: false, status: "pass", note: "Passed reuse and address checks." };
@@ -630,37 +694,41 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
         return;
       }
 
-      // --- Step 3: OCR couldn't confirm → escalate to Claude ------------
-      // Claude judges BOTH whether the screenshot matches the step AND
-      // whether it's the right property, in one lean call. We shrink the
-      // image first to minimise cost.
+      // --- 3. Escalate to Claude (judges step content + property) --------
       try {
-        const small = await shrinkImage(file);
-        const imageBase64 = await fileToBase64(small.blob);
+        const images = [];
+        for (const f of files) {
+          if (!f.type.startsWith("image/")) continue;
+          const small = await shrinkImage(f);
+          images.push({ data: await fileToBase64(small.blob), mime: small.mime });
+        }
+
         const { data, error } = await supabase.functions.invoke("check-screenshot", {
-          body: { imageBase64, imageMimeType: small.mime, stepText: step.text, propertyAddress: property },
+          body: { images, stepText: step.text, propertyAddress: property },
         });
 
         if (!error && data && (data.status === "pass" || data.status === "flag")) {
-          // Claude gave a real verdict.
+          const paths = data.status === "pass" ? [] : await uploadFiles(files);
           setState((prev) => {
             const n = [...prev];
-            n[idx] = { ...n[idx], done: true, checking: false, status: data.status, note: data.note };
+            n[idx] = { ...n[idx], done: true, checking: false, status: data.status, note: data.note, uploadedPaths: paths };
             return n;
           });
           return;
         }
-        // Claude unavailable (no key / quota / error) → fall back to letting
-        // the PM confirm with a reason, since we couldn't auto-verify.
+
+        // AI unavailable — let the PM confirm with a reason.
+        const paths = await uploadFiles(files);
         setState((prev) => {
           const n = [...prev];
-          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "" };
+          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "", uploadedPaths: paths };
           return n;
         });
       } catch {
+        const paths = await uploadFiles(files);
         setState((prev) => {
           const n = [...prev];
-          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "" };
+          n[idx] = { ...n[idx], checking: false, needsConfirm: true, confirmReason: "", uploadedPaths: paths };
           return n;
         });
       }
@@ -674,92 +742,70 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
     }
   };
 
-  // For screenshots we keep the actual File (to send) and its name (to show).
-  // Choosing a new file also clears any pending "needs confirmation" state,
-  // since the PM is replacing the image and it should be re-checked.
-  const setFile = (idx, file) => setState((prev) => {
+  // ---- Attaching / removing files --------------------------------------
+  const addFiles = (idx, newFiles) => setState((prev) => {
     const n = [...prev];
-    n[idx] = { ...n[idx], file, value: file ? file.name : "", needsConfirm: false, confirmReason: "" };
+    const merged = [...(n[idx].files || []), ...newFiles];
+    n[idx] = { ...n[idx], files: merged, value: merged.map((f) => f.name).join(", "), needsConfirm: false, confirmReason: "" };
     return n;
   });
+
+  const removeFile = (idx, fi) => setState((prev) => {
+    const n = [...prev];
+    const merged = (n[idx].files || []).filter((_, i) => i !== fi);
+    n[idx] = { ...n[idx], files: merged, value: merged.map((f) => f.name).join(", ") };
+    return n;
+  });
+
   const setValue = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], value: v }; return n; });
   const setConfirmReason = (idx, v) => setState((prev) => { const n = [...prev]; n[idx] = { ...n[idx], confirmReason: v }; return n; });
 
-  // Let a PM replace the screenshot on a step that flagged (reuse, failed check,
-  // or unverified) without redoing the whole checklist. Resets just that step
-  // with the new file, then re-runs the checks on it.
-  const redoStep = (idx, step, newFile) => {
-    if (!newFile) return;
+  // Replace the attachments on a step that flagged, without redoing the rest.
+  const redoStep = async (idx, step, newFiles) => {
+    if (!newFiles || newFiles.length === 0) return;
+    await removeUploaded(state[idx].uploadedPaths);
     setState((prev) => {
       const n = [...prev];
-      n[idx] = { ...n[idx], done: false, status: "pending", note: "", file: newFile, value: newFile.name, needsConfirm: false, confirmReason: "", checking: false };
+      n[idx] = { ...n[idx], done: false, status: "pending", note: "", files: newFiles,
+        value: newFiles.map((f) => f.name).join(", "), uploadedPaths: [], needsConfirm: false, confirmReason: "", checking: false };
       return n;
     });
-    // Re-run the checks on the replacement image (passed directly so we don't
-    // depend on the state update above having applied yet).
-    complete(idx, step, newFile);
+    complete(idx, step, newFiles);
   };
 
-  // PM confirms a screenshot whose address couldn't be auto-verified, giving a
-  // short reason. This completes the step with a distinct "unverified" status
-  // so the boss can see it in its own section, separate from genuine flags.
   const confirmUnverified = (idx) => {
     setState((prev) => {
       const n = [...prev];
       const reason = (n[idx].confirmReason || "").trim();
-      n[idx] = {
-        ...n[idx],
-        done: true,
-        needsConfirm: false,
-        status: "unverified",
-        note: `Address not auto-detected. PM confirmed: "${reason}"`,
-      };
+      n[idx] = { ...n[idx], done: true, needsConfirm: false, status: "unverified",
+        note: `Address not auto-detected. PM confirmed: "${reason}"` };
       return n;
     });
   };
 
+  // ---- Submit ----------------------------------------------------------
   const submit = async () => {
     setSubmitting(true);
-    // Genuine problems needing the boss's attention.
     const needsReview = state.some((s) => s.status === "flag" || s.status === "missing");
-    // PM-confirmed-but-unverified steps go in their own softer bucket.
     const hasUnverified = state.some((s) => s.status === "unverified");
 
-    // Upload the screenshot image ONLY for steps that flagged or were
-    // PM-confirmed — those are the ones a human might want to look at.
-    // Clean passes don't get their image stored, saving space.
-    const results = [];
-    for (const s of state) {
+    const results = state.map((s) => {
       const step = checklist.steps.find((x) => x.id === s.stepId);
-      const base = {
+      return {
         text: step.text, group: step.group, evidence: step.evidence,
         status: s.done ? s.status : "missing",
         note: s.done ? s.note : "Step not completed.",
         value: s.value,
+        // Files were uploaded when the step was checked, so the paths are ready.
+        screenshotPaths: s.uploadedPaths || [],
       };
-      const keepImage = s.file && (s.status === "flag" || s.status === "unverified");
-      if (keepImage) {
-        try {
-          const path = `${Date.now()}-${Math.random().toString(36).slice(2)}-${s.file.name}`.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const { error } = await supabase.storage.from("screenshots").upload(path, s.file);
-          if (error) {
-            console.error("Screenshot upload rejected:", error.message);
-          } else {
-            base.screenshotPath = path;
-          }
-        } catch (e) {
-          console.error("Screenshot upload failed:", e);
-          // Not fatal — the submission still saves, just without the stored image.
-        }
-      }
-      results.push(base);
-    }
+    });
 
+    clearDraft();
     onSubmit({
       id: Date.now().toString(),
       checklistTitle: checklist.title,
-      pm: pmName, property: property, time: "Just now", needsReview, hasUnverified,
-      results,
+      pm: pmName, property, time: "Just now", needsReview, hasUnverified, results,
     });
   };
 
@@ -769,8 +815,11 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
     <div>
       <button className="btn-ghost" onClick={onBack} style={{ marginBottom: 16, display: "inline-flex", alignItems: "center", gap: 6 }}><ChevronLeft size={16} /> Back</button>
       <Header title={checklist.title} sub={`${pmName} · ${property} · ${done} of ${checklist.steps.length} steps complete`} />
-      <div style={{ height: 6, background: C.line, borderRadius: 4, marginBottom: 22, overflow: "hidden" }}>
+      <div style={{ height: 6, background: C.line, borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
         <div style={{ width: `${(done / checklist.steps.length) * 100}%`, height: "100%", background: C.teal, transition: ".3s" }} />
+      </div>
+      <div style={{ fontSize: 12, color: C.sub, marginBottom: 20 }}>
+        {savedAt ? "Progress saved automatically — you can close this and come back." : "Progress saves automatically."}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -781,6 +830,7 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
           const sm = statusMeta[s.done ? s.status : "pending"];
           const showGroup = step.group && step.group !== lastGroup;
           lastGroup = step.group;
+          const fileCount = (s.files || []).length;
           return (
             <React.Fragment key={step.id}>
               {showGroup && (
@@ -791,25 +841,39 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
                   <div style={{ width: 24, height: 24, borderRadius: "50%", background: s.done ? sm.bg : "#eef2f5", color: sm.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontWeight: 700, fontSize: 12 }}>
                     {s.done ? <sm.Icon size={15} /> : "\u2022"}
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 500, fontSize: 14.5, lineHeight: 1.4 }}>{step.text}</div>
                     <div style={{ fontSize: 12, color: C.sub, marginTop: 4, display: "flex", alignItems: "center", gap: 6 }}><EvIcon size={13} /> {meta.label}</div>
 
-                    {!s.done && (
+                    {/* Attached files, listed so any one can be removed */}
+                    {!s.done && fileCount > 0 && (
+                      <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {s.files.map((f, fi) => (
+                          <div key={fi} style={{ display: "flex", alignItems: "center", gap: 8, background: C.tealSoft, borderRadius: 7, padding: "6px 10px", fontSize: 12.5 }}>
+                            <Camera size={13} style={{ color: C.teal, flexShrink: 0 }} />
+                            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                            <button onClick={() => removeFile(i, fi)} title="Remove" style={{ border: "none", background: "transparent", color: C.sub, cursor: "pointer", padding: 2, display: "flex" }}><X size={13} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!s.done && !s.needsConfirm && (
                       <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                         {step.evidence === "reference" && (
                           <input value={s.value} onChange={(e) => setValue(i, e.target.value)} placeholder="Palace reference no." style={{ flex: 1, minWidth: 180, padding: "8px 11px", border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 13 }} />
                         )}
                         {step.evidence === "screenshot" && (
-                          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
-                            <Upload size={14} /> {s.value ? "Screenshot attached" : "Attach screenshot"}
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => setFile(i, e.target.files[0] || null)} />
+                          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                            <Upload size={14} /> {fileCount > 0 ? "Add another file" : "Attach file(s)"}
+                            <input type="file" accept="image/*,.pdf" multiple style={{ display: "none" }}
+                              onChange={(e) => { addFiles(i, Array.from(e.target.files || [])); e.target.value = ""; }} />
                           </label>
                         )}
                         <button className="btn-primary" onClick={() => complete(i, step)}
-                          disabled={s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && !s.file)}
-                          style={{ opacity: (s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && !s.file)) ? 0.5 : 1 }}>
-                          {s.checking ? "Checking…" : step.evidence === "tick" ? "Mark done" : "Complete step"}
+                          disabled={s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && fileCount === 0)}
+                          style={{ opacity: (s.checking || (step.evidence === "reference" && !s.value) || (step.evidence === "screenshot" && fileCount === 0)) ? 0.5 : 1 }}>
+                          {s.checking ? "Checking…" : step.evidence === "tick" ? "Mark done" : `Complete step${fileCount > 1 ? ` (${fileCount} files)` : ""}`}
                         </button>
                       </div>
                     )}
@@ -820,14 +884,13 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
                           Couldn't confirm this is for {property}
                         </div>
                         <div style={{ fontSize: 13, color: C.sub, marginBottom: 12, lineHeight: 1.5 }}>
-                          The property address wasn't found in this screenshot. Please upload a clearer screenshot that shows the address, or confirm with a brief reason below.
+                          The property address wasn't found. Upload a clearer file showing the address, or confirm with a brief reason below.
                         </div>
-                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                          <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600, background: "#fff" }}>
-                            <Upload size={14} /> Upload a clearer one
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files[0]; if (f) { setFile(i, f); complete(i, step); } }} />
-                          </label>
-                        </div>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 13px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600, background: "#fff", cursor: "pointer" }}>
+                          <Upload size={14} /> Upload clearer file(s)
+                          <input type="file" accept="image/*,.pdf" multiple style={{ display: "none" }}
+                            onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) redoStep(i, step, fs); }} />
+                        </label>
                         <div style={{ marginTop: 12 }}>
                           <input value={s.confirmReason || ""} onChange={(e) => setConfirmReason(i, e.target.value)} placeholder="Reason (e.g. bond form doesn't show address)"
                             style={{ width: "100%", padding: "9px 12px", border: `1px solid ${C.line}`, borderRadius: 8, fontSize: 13, marginBottom: 10, boxSizing: "border-box", background: "#fff" }} />
@@ -846,8 +909,9 @@ function DoTask({ checklist, onSubmit, onBack, defaultName }) {
                         </div>
                         {step.evidence === "screenshot" && (s.status === "flag" || s.status === "unverified") && (
                           <label style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, padding: "7px 12px", border: `1px dashed ${C.teal}`, color: C.teal, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                            <Upload size={14} /> Replace screenshot
-                            <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => redoStep(i, step, e.target.files[0])} />
+                            <Upload size={14} /> Replace file(s)
+                            <input type="file" accept="image/*,.pdf" multiple style={{ display: "none" }}
+                              onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) redoStep(i, step, fs); }} />
                           </label>
                         )}
                       </div>
@@ -895,7 +959,10 @@ function ReviewModal({ submission, onClose, onDelete }) {
                     <span className="pill" style={{ background: sm.bg, color: sm.color, flexShrink: 0, height: "fit-content" }}><sm.Icon size={12} /> {sm.label}</span>
                   </div>
                   <div style={{ fontSize: 12, color: C.sub, marginTop: 5 }}>{r.note}{r.value ? ` · ${r.value}` : ""}</div>
-                  {r.screenshotPath && <ScreenshotViewer path={r.screenshotPath} />}
+                  {(r.screenshotPaths && r.screenshotPaths.length > 0
+                    ? r.screenshotPaths
+                    : (r.screenshotPath ? [r.screenshotPath] : [])
+                  ).map((p, pi) => <ScreenshotViewer key={pi} path={p} index={pi} />)}
                 </div>
               </React.Fragment>
             );
@@ -919,7 +986,7 @@ function ReviewModal({ submission, onClose, onDelete }) {
   );
 }
 
-function ScreenshotViewer({ path }) {
+function ScreenshotViewer({ path, index }) {
   const [url, setUrl] = useState(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -945,7 +1012,7 @@ function ScreenshotViewer({ path }) {
   return (
     <button className="btn-ghost" onClick={load} disabled={loading}
       style={{ marginTop: 8, fontSize: 12, padding: "6px 11px", display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <Eye size={13} /> {loading ? "Loading…" : failed ? "Couldn't load — retry" : "View screenshot"}
+      <Eye size={13} /> {loading ? "Loading…" : failed ? "Couldn't load — retry" : `View file${typeof index === "number" && index > 0 ? ` ${index + 1}` : ""}`}
     </button>
   );
 }
